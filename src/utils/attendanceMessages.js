@@ -4,6 +4,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ModalBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } = require('discord.js');
@@ -33,6 +34,18 @@ const STATUS_META = {
   excused: { label: 'Excused', emoji: '🟡' },
 };
 
+// Splits attendees into pages of 5 (Discord modal max 5 rows)
+function getPage(attSession, page) {
+  const pageSize = 5;
+  const start = page * pageSize;
+  return attSession.attendees.slice(start, start + pageSize);
+}
+
+function totalPages(attSession) {
+  return Math.ceil(attSession.attendees.length / 5);
+}
+
+// The panel message with a "Mark Attendance" button (and page buttons if needed)
 function buildAttendanceMarkingMessage(attSession) {
   const allDone = attSession.attendees.every(a => a.status !== null);
 
@@ -45,61 +58,83 @@ function buildAttendanceMarkingMessage(attSession) {
 
   const headerText = [
     `### 📋 Attendance — Session \`${attSession.sessionId}\``,
-    `Use the dropdowns below to mark each person.`,
+    `Click **Mark Attendance** to open the marking form.`,
     ``,
     statusLines,
   ].join('\n');
 
-  // Person picker
-  const personMenu = new StringSelectMenuBuilder()
-    .setCustomId(`attendance:pick_person:${attSession.sessionId}`)
-    .setPlaceholder('1️⃣ Select a person to mark...')
-    .setDisabled(attSession.finalized)
-    .addOptions(
-      attSession.attendees.map(a =>
-        new StringSelectMenuOptionBuilder()
-          .setLabel(`${getRoleLabel(a.role)}`)
-          .setDescription(`<@${a.userId}>`.slice(0, 50))
-          .setValue(a.userId)
-          .setEmoji(a.status ? STATUS_META[a.status].emoji : '⬜'),
-      ),
-    );
+  const pages = totalPages(attSession);
+  const buttons = [];
 
-  // Status picker
-  const statusMenu = new StringSelectMenuBuilder()
-    .setCustomId(`attendance:pick_status:${attSession.sessionId}`)
-    .setPlaceholder('2️⃣ Select their status...')
-    .setDisabled(attSession.finalized)
-    .addOptions(
-      Object.entries(STATUS_META).map(([key, meta]) =>
-        new StringSelectMenuOptionBuilder()
-          .setLabel(meta.label)
-          .setValue(key)
-          .setEmoji(meta.emoji),
-      ),
+  for (let i = 0; i < pages; i++) {
+    const pageAttendees = getPage(attSession, i);
+    const label = pages === 1 ? 'Mark Attendance' : `Mark Page ${i + 1} (${pageAttendees.map(a => getRoleLabel(a.role)).join(', ')})`;
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(`attendance:open_modal:${attSession.sessionId}:${i}`)
+        .setLabel(label)
+        .setEmoji('📝')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(attSession.finalized),
     );
+  }
 
-  const finalizeBtn = new ButtonBuilder()
-    .setCustomId(`attendance:finalize:${attSession.sessionId}`)
-    .setLabel('Finalize Attendance')
-    .setEmoji('📨')
-    .setStyle(ButtonStyle.Success)
-    .setDisabled(attSession.finalized || !allDone);
+  buttons.push(
+    new ButtonBuilder()
+      .setCustomId(`attendance:finalize:${attSession.sessionId}`)
+      .setLabel('Finalize Attendance')
+      .setEmoji('📨')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(attSession.finalized || !allDone),
+  );
+
+  // Split buttons into rows of 5
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 5) {
+    rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
+  }
 
   return {
     components: [
       new TextDisplayBuilder().setContent(headerText),
-      new ActionRowBuilder().addComponents(personMenu),
-      new ActionRowBuilder().addComponents(statusMenu),
-      new ActionRowBuilder().addComponents(finalizeBtn),
+      ...rows,
     ],
     flags: (1 << 15) | (1 << 6),
   };
 }
 
+// The modal with one select per attendee on that page
+function buildAttendanceModal(attSession, page) {
+  const pageAttendees = getPage(attSession, page);
+
+  const modal = new ModalBuilder()
+    .setCustomId(`attendance:submit:${attSession.sessionId}:${page}`)
+    .setTitle(`Attendance — Page ${page + 1}`);
+
+  for (const a of pageAttendees) {
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(`att_${a.userId}`)
+          .setPlaceholder(`${getRoleLabel(a.role)} — ${a.status ? STATUS_META[a.status].label : 'Select status...'}`)
+          .addOptions(
+            Object.entries(STATUS_META).map(([key, meta]) =>
+              new StringSelectMenuOptionBuilder()
+                .setLabel(meta.label)
+                .setValue(key)
+                .setEmoji(meta.emoji)
+                .setDefault(a.status === key),
+            ),
+          ),
+      ),
+    );
+  }
+
+  return modal;
+}
+
 function buildAttendanceLog(attSession) {
   const now = Math.floor(Date.now() / 1000);
-
   const groups = { present: [], late: [], excused: [], absent: [] };
   for (const a of attSession.attendees) {
     (groups[a.status] ?? groups.absent).push(a);
@@ -128,4 +163,9 @@ function buildAttendanceLog(attSession) {
   };
 }
 
-module.exports = { buildAttendanceMarkingMessage, buildAttendanceLog, getRoleLabel };
+module.exports = {
+  buildAttendanceMarkingMessage,
+  buildAttendanceModal,
+  buildAttendanceLog,
+  getRoleLabel,
+};
