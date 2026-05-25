@@ -46,60 +46,50 @@ const STATUS_META = {
 function buildAttendanceMarkingMessage(attSession) {
   const allDone = attSession.attendees.every(a => a.status !== null);
 
-  // Header container
-  const headerText = [
-    `### 📋 Attendance — Session \`${attSession.sessionId}\``,
-    `Mark each person's status below. Hit **Finalize** when done.`,
-  ].join('\n');
-
   const components = [];
 
-  const headerContainer = new ContainerBuilder()
-    .addTextDisplayComponents(t => t.setContent(headerText))
-    .addSeparatorComponents(s =>
-      s.setDivider(true).setSpacing(SeparatorSpacingSize.Small),
-    );
+  const headerText = [
+    `### 📋 Attendance — Session \`${attSession.sessionId}\``,
+    `Mark each person's status. Hit **Finalize** when all are marked.`,
+    ``,
+    ...attSession.attendees.map(a => {
+      const statusBadge = a.status
+        ? `${STATUS_META[a.status].emoji} ${STATUS_META[a.status].label}`
+        : '⬜ Unmarked';
+      return `> <@${a.userId}> — **${getRoleLabel(a.role)}** · ${statusBadge}`;
+    }),
+  ].join('\n');
 
+  const headerContainer = new ContainerBuilder()
+    .addTextDisplayComponents(t => t.setContent(headerText));
   components.push(headerContainer);
 
-  // One row per attendee: their name/role + status buttons
-  // Discord limits us to 5 ActionRows per message, so we batch into containers
-  // and keep the button rows outside (components v2 allows mixing)
-  const attendeeLines = attSession.attendees.map(a => {
-    const roleLabel   = getRoleLabel(a.role);
-    const statusBadge = a.status
-      ? `${STATUS_META[a.status].emoji} ${STATUS_META[a.status].label}`
-      : '⬜ Unmarked';
-    return `> <@${a.userId}> — **${roleLabel}** · ${statusBadge}`;
-  }).join('\n');
-
-  const statusContainer = new ContainerBuilder()
-    .addTextDisplayComponents(t => t.setContent(attendeeLines));
-
-  components.push(statusContainer);
-
-  // Button rows — up to 5, one per attendee (Discord hard limit)
-  // If there are more than 5 attendees we still render the first 5 rows of buttons;
-  // additional attendees show in the status list but host must use /attendance mark
-  // to set them individually (edge case for large sessions).
-  const buttonRows = [];
+  // One select menu row per attendee (max 4 attendees due to Discord's 5 row limit,
+  // row 5 reserved for Finalize)
+  const selectRows = [];
   for (const a of attSession.attendees) {
-    if (buttonRows.length >= 4) break; // reserve last row for Finalize
+    if (selectRows.length >= 4) break;
 
-    const row = new ActionRowBuilder().addComponents(
-      ...Object.entries(STATUS_META).map(([statusKey, meta]) =>
-        new ButtonBuilder()
-          .setCustomId(`attendance:mark:${attSession.sessionId}:${a.userId}:${statusKey}`)
-          .setLabel(`${a.userId.slice(-4)} · ${meta.label}`)
-          .setEmoji(meta.emoji)
-          .setStyle(a.status === statusKey ? ButtonStyle.Primary : meta.style)
-          .setDisabled(attSession.finalized),
-      ),
-    );
-    buttonRows.push(row);
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`attendance:mark:${attSession.sessionId}:${a.userId}`)
+      .setPlaceholder(`${getRoleLabel(a.role)} — ${a.status ? STATUS_META[a.status].label : 'Select status...'}`)
+      .setDisabled(attSession.finalized)
+      .addOptions(
+        Object.entries(STATUS_META).map(([statusKey, meta]) =>
+          new StringSelectMenuOptionBuilder()
+            .setLabel(`${meta.label}`)
+            .setValue(statusKey)
+            .setEmoji(meta.emoji)
+            .setDefault(a.status === statusKey),
+        ),
+      );
+
+    selectRows.push(new ActionRowBuilder().addComponents(menu));
   }
 
-  // Finalize row
+  components.push(...selectRows);
+
+  // Finalize button
   const finalizeRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`attendance:finalize:${attSession.sessionId}`)
@@ -108,11 +98,11 @@ function buildAttendanceMarkingMessage(attSession) {
       .setStyle(ButtonStyle.Success)
       .setDisabled(attSession.finalized || !allDone),
   );
-  buttonRows.push(finalizeRow);
+  components.push(finalizeRow);
 
   return {
-    components: [...components, ...buttonRows],
-    flags: (1 << 15) | (1 << 6), // IS_COMPONENTS_V2 | EPHEMERAL
+    components,
+    flags: (1 << 15) | (1 << 6),
   };
 }
 
