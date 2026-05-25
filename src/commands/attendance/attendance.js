@@ -148,12 +148,12 @@ module.exports = {
 // ──────────────────────────────────────────────────────────────────────────
 
 async function handleRecord(interaction, client) {
-  const sessionId  = interaction.options.getString('session_id');
+  const sessionId    = interaction.options.getString('session_id');
   const claimSession = sessions.get(sessionId);
 
   if (!claimSession) {
     return interaction.reply({
-      content: `⚠️ No claim session found with ID \`${sessionId}\`. The session must still be in memory — make sure you're recording attendance before restarting the bot.`,
+      content: `⚠️ No claim session found with ID \`${sessionId}\`.`,
       ephemeral: true,
     });
   }
@@ -172,12 +172,17 @@ async function handleRecord(interaction, client) {
     });
   }
 
-  // Build and store the attendance session
+  // Build the session object but DON'T store it yet
   const attSession = buildAttendanceSession(claimSession);
-  attendanceSessions.set(sessionId, attSession);
-
   const panel = buildAttendanceMarkingMessage(attSession);
-  await interaction.reply(panel);
 
-  console.log(`[Attendance] Panel opened for session ${sessionId} by ${interaction.user.tag}`);
+  try {
+    await interaction.reply(panel);
+    // Only store AFTER the reply succeeds
+    attendanceSessions.set(sessionId, attSession);
+    console.log(`[Attendance] Panel opened for session ${sessionId} by ${interaction.user.tag}`);
+  } catch (err) {
+    console.error('[Attendance] Failed to send panel:', err);
+    // Don't store the session — let them try again cleanly
+  }
 }
