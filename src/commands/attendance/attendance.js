@@ -12,7 +12,7 @@ const {
 } = require('../../utils/attendanceStore');
 const {
   buildAttendanceMarkingMessage,
-  buildAttendanceModal,
+  buildAttendanceFormMessage,
   buildAttendanceLog,
 } = require('../../utils/attendanceMessages');
 
@@ -46,13 +46,12 @@ module.exports = {
     if (sub === 'record') return handleRecord(interaction, client);
   },
 
-  // attendance:open_modal:<sessionId>:<page>
-  // attendance:finalize:<sessionId>
   async handleButton(interaction, client) {
     const parts  = interaction.customId.split(':');
     const action = parts[1];
 
-    if (action === 'open_modal') {
+    // Open the ephemeral form
+    if (action === 'open_form') {
       const sessionId  = parts[2];
       const page       = parseInt(parts[3], 10);
       const attSession = attendanceSessions.get(sessionId);
@@ -60,10 +59,18 @@ module.exports = {
       if (!attSession) return interaction.reply({ content: '⚠️ Session no longer exists.', ephemeral: true });
       if (attSession.hostId !== interaction.user.id) return interaction.reply({ content: '⚠️ Only the host can mark attendance.', ephemeral: true });
 
-      const modal = buildAttendanceModal(attSession, page);
-      return interaction.showModal(modal);
+      return interaction.reply(buildAttendanceFormMessage(attSession, page));
     }
 
+    // Close the form (Done button) — just dismiss it
+    if (action === 'close_form') {
+      return interaction.update({
+        components: [],
+        flags: (1 << 15) | (1 << 6),
+      });
+    }
+
+    // Finalize
     if (action === 'finalize') {
       const sessionId  = parts[2];
       const attSession = attendanceSessions.get(sessionId);
@@ -81,25 +88,26 @@ module.exports = {
     }
   },
 
-  // attendance:submit:<sessionId>:<page>
-  async handleModal(interaction, client) {
-    const parts      = interaction.customId.split(':');
-    const sessionId  = parts[2];
+  // attendance:set_status:<sessionId>:<userId>
+  async handleSelect(interaction, client) {
+    const parts     = interaction.customId.split(':');
+    const action    = parts[1];
+    const sessionId = parts[2];
+    const userId    = parts[3];
+    const status    = interaction.values[0];
+
+    if (action !== 'set_status') return;
+
     const attSession = attendanceSessions.get(sessionId);
-
     if (!attSession) return interaction.reply({ content: '⚠️ Session no longer exists.', ephemeral: true });
-    if (attSession.hostId !== interaction.user.id) return interaction.reply({ content: '⚠️ Only the host can submit attendance.', ephemeral: true });
+    if (attSession.hostId !== interaction.user.id) return interaction.reply({ content: '⚠️ Only the host can mark attendance.', ephemeral: true });
 
-    // Each field customId is att_<userId>
-    for (const [customId, field] of interaction.fields.fields) {
-      if (customId.startsWith('att_')) {
-        const userId = customId.replace('att_', '');
-        const status = field.value;
-        setAttendeeStatus(attSession, userId, status);
-      }
-    }
+    setAttendeeStatus(attSession, userId, status);
 
-    await interaction.update(buildAttendanceMarkingMessage(attSession));
+    // Refresh the form so dropdowns update
+    const page = attSession.attendees.findIndex(a => a.userId === userId);
+    const pageNum = Math.floor(page / 5);
+    await interaction.update(buildAttendanceFormMessage(attSession, pageNum));
   },
 };
 
