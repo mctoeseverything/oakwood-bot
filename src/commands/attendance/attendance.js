@@ -12,7 +12,7 @@ const {
 } = require('../../utils/attendanceStore');
 const {
   buildAttendanceMarkingMessage,
-  buildSingleMarkMessage,
+  buildAttendanceModal,
   buildAttendanceLog,
 } = require('../../utils/attendanceMessages');
 
@@ -46,23 +46,22 @@ module.exports = {
     if (sub === 'record') return handleRecord(interaction, client);
   },
 
+  // attendance:open_modal:<sessionId>:<page>
+  // attendance:finalize:<sessionId>
   async handleButton(interaction, client) {
     const parts  = interaction.customId.split(':');
     const action = parts[1];
 
-    // Open the single-person marking dropdown
-    if (action === 'mark_next') {
+    if (action === 'open_modal') {
       const sessionId  = parts[2];
+      const page       = parseInt(parts[3], 10);
       const attSession = attendanceSessions.get(sessionId);
 
       if (!attSession) return interaction.reply({ content: '⚠️ Session no longer exists.', ephemeral: true });
       if (attSession.hostId !== interaction.user.id) return interaction.reply({ content: '⚠️ Only the host can mark attendance.', ephemeral: true });
 
-      const nextUnmarked = attSession.attendees.find(a => a.status === null);
-      if (!nextUnmarked) return interaction.reply({ content: '⚠️ Everyone is already marked.', ephemeral: true });
-
-      const markMsg = buildSingleMarkMessage(attSession, nextUnmarked);
-      return interaction.reply(markMsg);
+      const modal = buildAttendanceModal(attSession, page);
+      return interaction.showModal(modal);
     }
 
     if (action === 'finalize') {
@@ -75,54 +74,34 @@ module.exports = {
       if (!isComplete(attSession)) return interaction.reply({ content: '⚠️ Not everyone has been marked yet.', ephemeral: true });
 
       attSession.finalized = true;
-      const updatedPanel = buildAttendanceMarkingMessage(attSession);
-      await interaction.update(updatedPanel);
-
+      await interaction.update(buildAttendanceMarkingMessage(attSession));
       await sendLog(client, buildAttendanceLog(attSession));
       attendanceSessions.delete(sessionId);
       console.log(`[Attendance] Session ${sessionId} finalized by ${interaction.user.tag}`);
     }
   },
 
-  // attendance:set_status:<sessionId>:<userId>
-  async handleSelect(interaction, client) {
-    const parts     = interaction.customId.split(':');
-    const action    = parts[1];
-    const sessionId = parts[2];
-    const userId    = parts[3];
-    const status    = interaction.values[0];
-
-    if (action !== 'set_status') return;
-
+  // attendance:submit:<sessionId>:<page>
+  async handleModal(interaction, client) {
+    const parts      = interaction.customId.split(':');
+    const sessionId  = parts[2];
     const attSession = attendanceSessions.get(sessionId);
+
     if (!attSession) return interaction.reply({ content: '⚠️ Session no longer exists.', ephemeral: true });
-    if (attSession.hostId !== interaction.user.id) return interaction.reply({ content: '⚠️ Only the host can mark attendance.', ephemeral: true });
+    if (attSession.hostId !== interaction.user.id) return interaction.reply({ content: '⚠️ Only the host can submit attendance.', ephemeral: true });
 
-    setAttendeeStatus(attSession, userId, status);
+    // Each field customId is att_<userId>
+    for (const [customId, field] of interaction.fields.fields) {
+      if (customId.startsWith('att_')) {
+        const userId = customId.replace('att_', '');
+        const status = field.value;
+        setAttendeeStatus(attSession, userId, status);
+      }
+    }
 
-    // Update this ephemeral message to show confirmation
-    const nextUnmarked = attSession.attendees.find(a => a.status === null);
-    const confirmText  = nextUnmarked
-      ? `✅ Marked. Click **Mark ${getRoleLabel(nextUnmarked.role)}** on the panel for the next person.`
-      : `✅ All attendees marked! Click **Finalize Attendance** on the panel.`;
-
-    await interaction.update({
-      components: [],
-      flags: (1 << 15) | (1 << 6),
-    });
-
-    // Also update the main panel
-    // We need to find and edit the original panel message
-    // For simplicity, follow up with confirmation and let them see updated panel
-    await interaction.followUp({
-      content: confirmText,
-      flags: (1 << 6),
-    });
+    await interaction.update(buildAttendanceMarkingMessage(attSession));
   },
 };
-
-// Need getRoleLabel in this file too
-const { getRoleLabel } = require('../../utils/attendanceMessages');
 
 async function handleRecord(interaction, client) {
   const sessionId    = interaction.options.getString('session_id');

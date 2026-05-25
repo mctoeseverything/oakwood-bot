@@ -4,6 +4,8 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ModalBuilder,
+  LabelBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } = require('discord.js');
@@ -33,9 +35,19 @@ const STATUS_META = {
   excused: { label: 'Excused', emoji: '🟡' },
 };
 
-// Main panel — shows status list + Mark and Finalize buttons
+// Pages of 5 attendees per modal (Discord max 5 rows)
+function getPage(attSession, page) {
+  return attSession.attendees.slice(page * 5, page * 5 + 5);
+}
+
+function totalPages(attSession) {
+  return Math.ceil(attSession.attendees.length / 5);
+}
+
+// Main panel message
 function buildAttendanceMarkingMessage(attSession) {
   const allDone = attSession.attendees.every(a => a.status !== null);
+  const pages   = totalPages(attSession);
 
   const statusLines = attSession.attendees.map(a => {
     const badge = a.status
@@ -46,68 +58,86 @@ function buildAttendanceMarkingMessage(attSession) {
 
   const text = [
     `### 📋 Attendance — Session \`${attSession.sessionId}\``,
-    `Click **Mark Attendance** to start marking. Each click marks one person.`,
+    `Click the button(s) below to open the marking form.`,
     ``,
     statusLines,
   ].join('\n');
 
-  // Find first unmarked attendee
-  const nextUnmarked = attSession.attendees.find(a => a.status === null);
+  const buttons = [];
+  for (let i = 0; i < pages; i++) {
+    const pageAttendees = getPage(attSession, i);
+    const label = pages === 1
+      ? 'Mark Attendance'
+      : `Mark Page ${i + 1} (${pageAttendees.map(a => getRoleLabel(a.role)).join(', ')})`;
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(`attendance:open_modal:${attSession.sessionId}:${i}`)
+        .setLabel(label)
+        .setEmoji('📝')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(attSession.finalized),
+    );
+  }
 
-  const markBtn = new ButtonBuilder()
-    .setCustomId(`attendance:mark_next:${attSession.sessionId}`)
-    .setLabel(nextUnmarked ? `Mark ${getRoleLabel(nextUnmarked.role)}` : 'All Marked')
-    .setEmoji('📝')
-    .setStyle(ButtonStyle.Primary)
-    .setDisabled(attSession.finalized || !nextUnmarked);
+  buttons.push(
+    new ButtonBuilder()
+      .setCustomId(`attendance:finalize:${attSession.sessionId}`)
+      .setLabel('Finalize Attendance')
+      .setEmoji('📨')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(attSession.finalized || !allDone),
+  );
 
-  const finalizeBtn = new ButtonBuilder()
-    .setCustomId(`attendance:finalize:${attSession.sessionId}`)
-    .setLabel('Finalize Attendance')
-    .setEmoji('📨')
-    .setStyle(ButtonStyle.Success)
-    .setDisabled(attSession.finalized || !allDone);
+  const rows = [];
+  for (let i = 0; i < buttons.length; i += 5) {
+    rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
+  }
 
   return {
-    components: [
-      new TextDisplayBuilder().setContent(text),
-      new ActionRowBuilder().addComponents(markBtn, finalizeBtn),
-    ],
+    components: [new TextDisplayBuilder().setContent(text), ...rows],
     flags: (1 << 15) | (1 << 6),
   };
 }
 
-// Marking panel for a single attendee — shown after clicking Mark
-function buildSingleMarkMessage(attSession, attendee) {
-  const text = [
-    `### 📝 Mark Attendance`,
-    `Session \`${attSession.sessionId}\` — select a status for <@${attendee.userId}> (**${getRoleLabel(attendee.role)}**)`,
-  ].join('\n');
+// Modal with LabelBuilder + select menu per attendee
+function buildAttendanceModal(attSession, page) {
+  const pageAttendees = getPage(attSession, page);
+  const pages         = totalPages(attSession);
+  const title         = pages === 1 ? 'Mark Attendance' : `Mark Attendance (Page ${page + 1}/${pages})`;
 
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(`attendance:set_status:${attSession.sessionId}:${attendee.userId}`)
-    .setPlaceholder('Select status...')
-    .addOptions(
-      Object.entries(STATUS_META).map(([key, meta]) =>
-        new StringSelectMenuOptionBuilder()
-          .setLabel(meta.label)
-          .setValue(key)
-          .setEmoji(meta.emoji)
-          .setDefault(attendee.status === key),
+  const modal = new ModalBuilder()
+    .setCustomId(`attendance:submit:${attSession.sessionId}:${page}`)
+    .setTitle(title);
+
+  for (const a of pageAttendees) {
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        new LabelBuilder()
+          .setLabel(getRoleLabel(a.role))
+          .setDescription(`<@${a.userId}>`)
+          .setStringSelectMenuComponent(
+            new StringSelectMenuBuilder()
+              .setCustomId(`att_${a.userId}`)
+              .setPlaceholder(a.status ? STATUS_META[a.status].label : 'Select status...')
+              .addOptions(
+                Object.entries(STATUS_META).map(([key, meta]) =>
+                  new StringSelectMenuOptionBuilder()
+                    .setLabel(meta.label)
+                    .setValue(key)
+                    .setEmoji(meta.emoji)
+                    .setDefault(a.status === key),
+                ),
+              ),
+          ),
       ),
     );
+  }
 
-  return {
-    components: [
-      new TextDisplayBuilder().setContent(text),
-      new ActionRowBuilder().addComponents(menu),
-    ],
-    flags: (1 << 15) | (1 << 6),
-  };
+  return modal;
 }
 
 function buildAttendanceLog(attSession) {
-  const now = Math.floor(Date.now() / 1000);
+  const now    = Math.floor(Date.now() / 1000);
   const groups = { present: [], late: [], excused: [], absent: [] };
   for (const a of attSession.attendees) {
     (groups[a.status] ?? groups.absent).push(a);
@@ -138,7 +168,7 @@ function buildAttendanceLog(attSession) {
 
 module.exports = {
   buildAttendanceMarkingMessage,
-  buildSingleMarkMessage,
+  buildAttendanceModal,
   buildAttendanceLog,
   getRoleLabel,
 };
