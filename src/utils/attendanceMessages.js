@@ -56,3 +56,9 @@ function buildAttendanceMarkingMessage(attSession) {
     flags: (1 << 15) | (1 << 6),
   };
 }
+
+module.exports = {
+  buildAttendanceMarkingMessage,
+  buildAttendanceLog,
+  getRoleLabel,
+};
