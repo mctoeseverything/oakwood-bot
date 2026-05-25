@@ -1,6 +1,4 @@
 const {
-  ContainerBuilder,
-  TextDisplayBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -93,53 +91,52 @@ function buildAttendanceMarkingMessage(attSession) {
 function buildAttendanceFormMessage(attSession, page) {
   const pageAttendees = attSession.attendees.slice(page * 5, page * 5 + 5);
   const pages         = Math.ceil(attSession.attendees.length / 5);
-  const title         = pages === 1 ? '### 📝 Mark Attendance' : `### 📝 Mark Attendance — Page ${page + 1}/${pages}`;
+  const title         = pages === 1
+    ? '📝 **Mark Attendance**'
+    : `📝 **Mark Attendance — Page ${page + 1}/${pages}**`;
 
-  const components = [
-    new TextDisplayBuilder().setContent(`${title}\nSession \`${attSession.sessionId}\` — select a status for each person below.`),
+  const lines = [
+    title,
+    `Session \`${attSession.sessionId}\` — select a status for each person below.`,
+    '',
+    ...pageAttendees.map(a => {
+      const badge = a.status ? `${STATUS_META[a.status].emoji} ${STATUS_META[a.status].label}` : '⬜ Unmarked';
+      return `**${getRoleLabel(a.role)}** — <@${a.userId}> · ${badge}`;
+    }),
   ];
 
-  for (const a of pageAttendees) {
-    components.push(
-      new ActionRowBuilder().addComponents(
-        new LabelBuilder()
-          .setLabel(getRoleLabel(a.role))
-          .setDescription(`User: <@${a.userId}>`)
-          .setStringSelectMenuComponent(
-            new StringSelectMenuBuilder()
-              .setCustomId(`attendance:set_status:${attSession.sessionId}:${a.userId}`)
-              .setPlaceholder(a.status ? STATUS_META[a.status].label : 'Select status...')
-              .addOptions(
-                Object.entries(STATUS_META).map(([key, meta]) =>
-                  new StringSelectMenuOptionBuilder()
-                    .setLabel(meta.label)
-                    .setValue(key)
-                    .setEmoji(meta.emoji)
-                    .setDefault(a.status === key),
-                ),
-              ),
+  const rows = pageAttendees.map(a =>
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`attendance:set_status:${attSession.sessionId}:${a.userId}`)
+        .setPlaceholder(`${getRoleLabel(a.role)} — select status...`)
+        .addOptions(
+          Object.entries(STATUS_META).map(([key, meta]) =>
+            new StringSelectMenuOptionBuilder()
+              .setLabel(`${meta.emoji} ${meta.label}`)
+              .setValue(key)
+              .setDefault(a.status === key),
           ),
-      ),
-    );
-  }
+        ),
+    )
+  );
 
-  // Submit button
-  components.push(
+  rows.push(
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`attendance:close_form:${attSession.sessionId}`)
         .setLabel('Done')
         .setEmoji('✅')
         .setStyle(ButtonStyle.Success),
-    ),
+    )
   );
 
   return {
-    components,
-    flags: (1 << 15) | (1 << 6),
+    content: lines.join('\n'),
+    components: rows,
+    flags: (1 << 6), // EPHEMERAL only, no Components V2
   };
 }
-
 function buildAttendanceLog(attSession) {
   const now    = Math.floor(Date.now() / 1000);
   const groups = { present: [], late: [], excused: [], absent: [] };
