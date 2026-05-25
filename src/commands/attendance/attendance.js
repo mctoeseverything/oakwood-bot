@@ -15,7 +15,7 @@ const {
   buildAttendanceLog,
 } = require('../../utils/attendanceMessages');
 
-// ─── Log helper (mirrors claim.js) ─────────────────────────────────────────
+// ─── Log helper ─────────────────────────────────────────────────────────────
 async function sendLog(client, payload) {
   const logChannelId = process.env.LOG_CHANNEL_ID;
   if (!logChannelId) return;
@@ -27,7 +27,7 @@ async function sendLog(client, payload) {
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -51,48 +51,53 @@ module.exports = {
   },
 
   // ─────────────────────────────────────────────────────────────
+  // SELECT MENU HANDLER
+  // attendance:mark:<sessionId>:<userId>
+  // ─────────────────────────────────────────────────────────────
+  async handleSelect(interaction, client) {
+    const parts     = interaction.customId.split(':');
+    const action    = parts[1];
+    const sessionId = parts[2];
+    const targetId  = parts[3];
+    const status    = interaction.values[0];
+
+    if (action !== 'mark') return;
+
+    const attSession = attendanceSessions.get(sessionId);
+    if (!attSession) {
+      return interaction.reply({
+        content: '⚠️ This attendance session no longer exists.',
+        ephemeral: true,
+      });
+    }
+
+    if (attSession.finalized) {
+      return interaction.reply({
+        content: '⚠️ This attendance session has already been finalized.',
+        ephemeral: true,
+      });
+    }
+
+    if (attSession.hostId !== interaction.user.id) {
+      return interaction.reply({
+        content: '⚠️ Only the host can mark attendance.',
+        ephemeral: true,
+      });
+    }
+
+    setAttendeeStatus(attSession, targetId, status);
+
+    const updated = buildAttendanceMarkingMessage(attSession);
+    await interaction.update(updated);
+  },
+
+  // ─────────────────────────────────────────────────────────────
   // BUTTON HANDLER
-  // attendance:mark:<sessionId>:<userId>:<status>
   // attendance:finalize:<sessionId>
   // ─────────────────────────────────────────────────────────────
   async handleButton(interaction, client) {
     const parts  = interaction.customId.split(':');
     const action = parts[1];
-
-    if (action === 'mark') {
-      const sessionId = parts[2];
-      const targetId  = parts[3];
-      const status    = parts[4];
-
-      const attSession = attendanceSessions.get(sessionId);
-      if (!attSession) {
-        return interaction.reply({
-          content: '⚠️ This attendance session no longer exists.',
-          ephemeral: true,
-        });
-      }
-
-      if (attSession.finalized) {
-        return interaction.reply({
-          content: '⚠️ This attendance session has already been finalized.',
-          ephemeral: true,
-        });
-      }
-
-      if (attSession.hostId !== interaction.user.id) {
-        return interaction.reply({
-          content: '⚠️ Only the host can mark attendance.',
-          ephemeral: true,
-        });
-      }
-
-      setAttendeeStatus(attSession, targetId, status);
-
-      // Refresh the ephemeral panel
-      const updated = buildAttendanceMarkingMessage(attSession);
-      await interaction.update(updated);
-      return;
-    }
 
     if (action === 'finalize') {
       const sessionId  = parts[2];
@@ -128,24 +133,20 @@ module.exports = {
 
       attSession.finalized = true;
 
-      // Update the panel to show finalized state
       const updatedPanel = buildAttendanceMarkingMessage(attSession);
       await interaction.update(updatedPanel);
 
-      // Send the log
       const logPayload = buildAttendanceLog(attSession);
       await sendLog(client, logPayload);
 
-      // Clean up
       attendanceSessions.delete(sessionId);
 
       console.log(`[Attendance] Session ${sessionId} finalized by ${interaction.user.tag}`);
-      return;
     }
   },
 };
 
-// ──────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
 
 async function handleRecord(interaction, client) {
   const sessionId    = interaction.options.getString('session_id');
@@ -153,7 +154,7 @@ async function handleRecord(interaction, client) {
 
   if (!claimSession) {
     return interaction.reply({
-      content: `⚠️ No claim session found with ID \`${sessionId}\`.`,
+      content: `⚠️ No claim session found with ID \`${sessionId}\`. The session must still be in memory.`,
       ephemeral: true,
     });
   }
@@ -172,17 +173,14 @@ async function handleRecord(interaction, client) {
     });
   }
 
-  // Build the session object but DON'T store it yet
   const attSession = buildAttendanceSession(claimSession);
-  const panel = buildAttendanceMarkingMessage(attSession);
+  const panel      = buildAttendanceMarkingMessage(attSession);
 
   try {
     await interaction.reply(panel);
-    // Only store AFTER the reply succeeds
     attendanceSessions.set(sessionId, attSession);
     console.log(`[Attendance] Panel opened for session ${sessionId} by ${interaction.user.tag}`);
   } catch (err) {
     console.error('[Attendance] Failed to send panel:', err);
-    // Don't store the session — let them try again cleanly
   }
 }

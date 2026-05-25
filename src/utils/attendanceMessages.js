@@ -6,8 +6,9 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
 } = require('discord.js');
-
 // ─── Role label helper ──────────────────────────────────────────────────────
 
 const ROLE_META = {
