@@ -54,42 +54,34 @@ module.exports = {
   // SELECT MENU HANDLER
   // attendance:mark:<sessionId>:<userId>
   // ─────────────────────────────────────────────────────────────
-  async handleSelect(interaction, client) {
-    const parts     = interaction.customId.split(':');
-    const action    = parts[1];
-    const sessionId = parts[2];
-    const targetId  = parts[3];
-    const status    = interaction.values[0];
+async handleSelect(interaction, client) {
+  const parts     = interaction.customId.split(':');
+  const action    = parts[1];
+  const sessionId = parts[2];
 
-    if (action !== 'mark') return;
+  const attSession = attendanceSessions.get(sessionId);
+  if (!attSession) return interaction.reply({ content: '⚠️ Session no longer exists.', ephemeral: true });
+  if (attSession.finalized) return interaction.reply({ content: '⚠️ Already finalized.', ephemeral: true });
+  if (attSession.hostId !== interaction.user.id) return interaction.reply({ content: '⚠️ Only the host can mark attendance.', ephemeral: true });
 
-    const attSession = attendanceSessions.get(sessionId);
-    if (!attSession) {
-      return interaction.reply({
-        content: '⚠️ This attendance session no longer exists.',
-        ephemeral: true,
-      });
+  if (action === 'pick_person') {
+    attSession._pendingUserId = interaction.values[0];
+    await interaction.deferUpdate();
+    return;
+  }
+
+  if (action === 'pick_status') {
+    const targetId = attSession._pendingUserId;
+    if (!targetId) {
+      return interaction.reply({ content: '⚠️ Pick a person first using the first dropdown.', ephemeral: true });
     }
-
-    if (attSession.finalized) {
-      return interaction.reply({
-        content: '⚠️ This attendance session has already been finalized.',
-        ephemeral: true,
-      });
-    }
-
-    if (attSession.hostId !== interaction.user.id) {
-      return interaction.reply({
-        content: '⚠️ Only the host can mark attendance.',
-        ephemeral: true,
-      });
-    }
-
+    const status = interaction.values[0];
     setAttendeeStatus(attSession, targetId, status);
-
+    attSession._pendingUserId = null;
     const updated = buildAttendanceMarkingMessage(attSession);
     await interaction.update(updated);
-  },
+  }
+},
 
   // ─────────────────────────────────────────────────────────────
   // BUTTON HANDLER

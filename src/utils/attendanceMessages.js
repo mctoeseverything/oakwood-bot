@@ -1,145 +1,131 @@
 const {
+  ContainerBuilder,
   TextDisplayBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
-  ContainerBuilder,
 } = require('discord.js');
 
-// ─── Role label helper ──────────────────────────────────────────────────────
-
 const ROLE_META = {
-  'host':        { label: 'Host',        emoji: '👑' },
-  'co-host':     { label: 'Co-Host',     emoji: '👔' },
-  'trainer-a':   { label: 'Trainer A',   emoji: '🅰️' },
-  'assistant-a': { label: 'Assistant A', emoji: '🅰️' },
-  'trainer-b':   { label: 'Trainer B',   emoji: '🅱️' },
-  'assistant-b': { label: 'Assistant B', emoji: '🅱️' },
-  'trainer-c':   { label: 'Trainer C',   emoji: '🇨'  },
-  'assistant-c': { label: 'Assistant C', emoji: '🇨'  },
-  'trainer-d':   { label: 'Trainer D',   emoji: '🇩'  },
-  'assistant-d': { label: 'Assistant D', emoji: '🇩'  },
-  'spectator':   { label: 'Spectator',   emoji: '🕶️' },
+  'host':        { label: 'Host'        },
+  'co-host':     { label: 'Co-Host'     },
+  'trainer-a':   { label: 'Trainer A'   },
+  'assistant-a': { label: 'Assistant A' },
+  'trainer-b':   { label: 'Trainer B'   },
+  'assistant-b': { label: 'Assistant B' },
+  'trainer-c':   { label: 'Trainer C'   },
+  'assistant-c': { label: 'Assistant C' },
+  'trainer-d':   { label: 'Trainer D'   },
+  'assistant-d': { label: 'Assistant D' },
+  'spectator':   { label: 'Spectator'   },
 };
 
 function getRoleLabel(key) {
   return ROLE_META[key]?.label ?? key;
 }
 
-// ─── Status config ──────────────────────────────────────────────────────────
-
 const STATUS_META = {
-  present: { label: 'Present', emoji: '✅', style: ButtonStyle.Success  },
-  absent:  { label: 'Absent',  emoji: '❌', style: ButtonStyle.Danger   },
-  late:    { label: 'Late',    emoji: '🕐', style: ButtonStyle.Primary  },
-  excused: { label: 'Excused', emoji: '🟡', style: ButtonStyle.Secondary },
+  present: { label: 'Present', emoji: '✅' },
+  absent:  { label: 'Absent',  emoji: '❌' },
+  late:    { label: 'Late',    emoji: '🕐' },
+  excused: { label: 'Excused', emoji: '🟡' },
 };
-
-// ─── Attendance marking message ─────────────────────────────────────────────
 
 function buildAttendanceMarkingMessage(attSession) {
   const allDone = attSession.attendees.every(a => a.status !== null);
-  const components = [];
+
+  const statusLines = attSession.attendees.map(a => {
+    const badge = a.status
+      ? `${STATUS_META[a.status].emoji} ${STATUS_META[a.status].label}`
+      : '⬜ Unmarked';
+    return `> <@${a.userId}> — **${getRoleLabel(a.role)}** · ${badge}`;
+  }).join('\n');
 
   const headerText = [
     `### 📋 Attendance — Session \`${attSession.sessionId}\``,
-    `Mark each person's status. Hit **Finalize** when all are marked.`,
+    `Use the dropdowns below to mark each person.`,
     ``,
-    ...attSession.attendees.map(a => {
-      const statusBadge = a.status
-        ? `${STATUS_META[a.status].emoji} ${STATUS_META[a.status].label}`
-        : '⬜ Unmarked';
-      return `> <@${a.userId}> — **${getRoleLabel(a.role)}** · ${statusBadge}`;
-    }),
+    statusLines,
   ].join('\n');
 
-  components.push(new TextDisplayBuilder().setContent(headerText));
+  // Person picker
+  const personMenu = new StringSelectMenuBuilder()
+    .setCustomId(`attendance:pick_person:${attSession.sessionId}`)
+    .setPlaceholder('1️⃣ Select a person to mark...')
+    .setDisabled(attSession.finalized)
+    .addOptions(
+      attSession.attendees.map(a =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(`${getRoleLabel(a.role)}`)
+          .setDescription(`<@${a.userId}>`.slice(0, 50))
+          .setValue(a.userId)
+          .setEmoji(a.status ? STATUS_META[a.status].emoji : '⬜'),
+      ),
+    );
 
-  for (const a of attSession.attendees) {
-    if (components.length >= 5) break;
+  // Status picker
+  const statusMenu = new StringSelectMenuBuilder()
+    .setCustomId(`attendance:pick_status:${attSession.sessionId}`)
+    .setPlaceholder('2️⃣ Select their status...')
+    .setDisabled(attSession.finalized)
+    .addOptions(
+      Object.entries(STATUS_META).map(([key, meta]) =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(meta.label)
+          .setValue(key)
+          .setEmoji(meta.emoji),
+      ),
+    );
 
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId(`attendance:mark:${attSession.sessionId}:${a.userId}`)
-      .setPlaceholder(`${getRoleLabel(a.role)} — ${a.status ? STATUS_META[a.status].label : 'Select status...'}`)
-      .setDisabled(attSession.finalized)
-      .addOptions(
-        Object.entries(STATUS_META).map(([statusKey, meta]) =>
-          new StringSelectMenuOptionBuilder()
-            .setLabel(meta.label)
-            .setValue(statusKey)
-            .setEmoji(meta.emoji)
-            .setDefault(a.status === statusKey),
-        ),
-      );
-
-    components.push(new ActionRowBuilder().addComponents(menu));
-  }
-
-  components.push(
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`attendance:finalize:${attSession.sessionId}`)
-        .setLabel('Finalize Attendance')
-        .setEmoji('📨')
-        .setStyle(ButtonStyle.Success)
-        .setDisabled(attSession.finalized || !allDone),
-    ),
-  );
+  const finalizeBtn = new ButtonBuilder()
+    .setCustomId(`attendance:finalize:${attSession.sessionId}`)
+    .setLabel('Finalize Attendance')
+    .setEmoji('📨')
+    .setStyle(ButtonStyle.Success)
+    .setDisabled(attSession.finalized || !allDone);
 
   return {
-    components,
+    components: [
+      new TextDisplayBuilder().setContent(headerText),
+      new ActionRowBuilder().addComponents(personMenu),
+      new ActionRowBuilder().addComponents(statusMenu),
+      new ActionRowBuilder().addComponents(finalizeBtn),
+    ],
     flags: (1 << 15) | (1 << 6),
   };
 }
 
-// ─── Attendance log message ─────────────────────────────────────────────────
-
 function buildAttendanceLog(attSession) {
   const now = Math.floor(Date.now() / 1000);
 
-  const statusGroups = {
-    present: [],
-    late:    [],
-    excused: [],
-    absent:  [],
-  };
-
+  const groups = { present: [], late: [], excused: [], absent: [] };
   for (const a of attSession.attendees) {
-    const bucket = statusGroups[a.status] ?? statusGroups.absent;
-    bucket.push({ userId: a.userId, role: a.role });
+    (groups[a.status] ?? groups.absent).push(a);
   }
 
-  function formatGroup(label, emoji, entries) {
-    if (entries.length === 0) return null;
-    const lines = entries.map(e => `> <@${e.userId}> — ${getRoleLabel(e.role)}`);
-    return [`**${emoji} ${label}**`, ...lines].join('\n');
+  function fmt(emoji, label, entries) {
+    if (!entries.length) return null;
+    return [`**${emoji} ${label}**`, ...entries.map(a => `> <@${a.userId}> — ${getRoleLabel(a.role)}`)].join('\n');
   }
 
-  const sections = [
+  const text = [
     `### 📋 Attendance Log — Session \`${attSession.sessionId}\``,
     `> **Host:** <@${attSession.hostId}>`,
     `> **Recorded:** <t:${now}:F>`,
-    `> **Total Attendees:** ${attSession.attendees.length}`,
+    `> **Total:** ${attSession.attendees.length}`,
     ``,
-    formatGroup('Present',  STATUS_META.present.emoji,  statusGroups.present),
-    formatGroup('Late',     STATUS_META.late.emoji,     statusGroups.late),
-    formatGroup('Excused',  STATUS_META.excused.emoji,  statusGroups.excused),
-    formatGroup('Absent',   STATUS_META.absent.emoji,   statusGroups.absent),
-  ].filter(Boolean);
-
-  const container = new ContainerBuilder()
-    .addTextDisplayComponents(t => t.setContent(sections.join('\n')));
+    fmt('✅', 'Present', groups.present),
+    fmt('🕐', 'Late',    groups.late),
+    fmt('🟡', 'Excused', groups.excused),
+    fmt('❌', 'Absent',  groups.absent),
+  ].filter(Boolean).join('\n');
 
   return {
-    components: [container],
+    components: [new ContainerBuilder().addTextDisplayComponents(t => t.setContent(text))],
     flags: (1 << 15),
   };
 }
 
-module.exports = {
-  buildAttendanceMarkingMessage,
-  buildAttendanceLog,
-  getRoleLabel,
-};
+module.exports = { buildAttendanceMarkingMessage, buildAttendanceLog, getRoleLabel };
