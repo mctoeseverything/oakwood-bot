@@ -27,6 +27,7 @@ const attendanceSessions = new Map();
  */
 function buildAttendanceSession(claimSession) {
   const attendees = [];
+  const seenUserIds = new Set();
 
   // Host is always first
   attendees.push({
@@ -34,16 +35,21 @@ function buildAttendanceSession(claimSession) {
     role: 'host',
     status: null,
   });
+  seenUserIds.add(claimSession.hostId);
 
   // All claimed slots
   for (const [key, slot] of Object.entries(claimSession.slots)) {
     if (slot.max === 1) {
-      if (slot.claimed) {
+      if (slot.claimed && !seenUserIds.has(slot.claimed)) {
+        seenUserIds.add(slot.claimed);
         attendees.push({ userId: slot.claimed, role: key, status: null });
       }
     } else {
       for (const userId of slot.claimed) {
-        attendees.push({ userId, role: key, status: null });
+        if (!seenUserIds.has(userId)) {
+          seenUserIds.add(userId);
+          attendees.push({ userId, role: key, status: null });
+        }
       }
     }
   }
