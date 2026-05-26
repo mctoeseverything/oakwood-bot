@@ -28,6 +28,16 @@ async function sendLog(client, payload) {
   }
 }
 
+async function refreshAttendancePanel(client, attSession) {
+  try {
+    const channel = await client.channels.fetch(attSession.channelId);
+    const msg = await channel.messages.fetch(attSession.messageId);
+    await msg.edit(buildAttendanceMarkingMessage(attSession));
+  } catch (err) {
+    console.error('[Attendance] Failed to refresh panel:', err);
+  }
+}
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('attendance')
@@ -89,24 +99,29 @@ module.exports = {
   },
 
   async handleSelect(interaction, client) {
-    const parts     = interaction.customId.split(':');
-    const action    = parts[1];
-    const sessionId = parts[2];
-    const userId    = parts[3];
-    const status    = interaction.values[0];
+  const parts     = interaction.customId.split(':');
+  const action    = parts[1];
+  const sessionId = parts[2];
+  const userId    = parts[3];
+  const status    = interaction.values[0];
 
-    if (action !== 'set_status') return;
+  if (action !== 'set_status') return;
 
-    const attSession = attendanceSessions.get(sessionId);
-    if (!attSession) return interaction.reply({ content: '⚠️ Session no longer exists.', flags: (1 << 6) });
-    if (attSession.hostId !== interaction.user.id) return interaction.reply({ content: '⚠️ Only the host can mark attendance.', flags: (1 << 6) });
+  const attSession = attendanceSessions.get(sessionId);
+  if (!attSession) return interaction.reply({ content: '⚠️ Session no longer exists.', flags: (1 << 6) });
+  if (attSession.hostId !== interaction.user.id) return interaction.reply({ content: '⚠️ Only the host can mark attendance.', flags: (1 << 6) });
 
-    setAttendeeStatus(attSession, userId, status);
+  setAttendeeStatus(attSession, userId, status);
 
-    const page = attSession.attendees.findIndex(a => a.userId === userId);
-    const pageNum = Math.floor(page / 5);
-    await interaction.update(buildAttendanceFormMessage(attSession, pageNum));
-  },
+  const page = attSession.attendees.findIndex(a => a.userId === userId);
+  const pageNum = Math.floor(page / 5);
+
+  // Update the ephemeral form and refresh the main panel simultaneously
+  await Promise.all([
+    interaction.update(buildAttendanceFormMessage(attSession, pageNum)),
+    refreshAttendancePanel(client, attSession),
+  ]);
+},
 };
 
 async function handleRecord(interaction, client) {
@@ -118,10 +133,11 @@ async function handleRecord(interaction, client) {
   if (attendanceSessions.has(sessionId)) return interaction.reply({ content: `⚠️ Attendance panel for \`${sessionId}\` is already open.`, flags: (1 << 6) });
 
   const attSession = buildAttendanceSession(claimSession);
-  const panel      = buildAttendanceMarkingMessage(attSession);
 
   try {
-    await interaction.reply(panel);
+    const msg = await interaction.reply({ ...buildAttendanceMarkingMessage(attSession), fetchReply: true });
+    attSession.channelId = msg.channelId;
+    attSession.messageId = msg.id;
     attendanceSessions.set(sessionId, attSession);
     console.log(`[Attendance] Panel opened for session ${sessionId} by ${interaction.user.tag}`);
   } catch (err) {
