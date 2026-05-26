@@ -7,6 +7,7 @@ const {
   ContainerBuilder,
   TextDisplayBuilder,
 } = require('discord.js');
+
 const ROLE_META = {
   'host':        { label: 'Host'        },
   'co-host':     { label: 'Co-Host'     },
@@ -32,7 +33,6 @@ const STATUS_META = {
   excused: { label: 'Excused', emoji: '🟡' },
 };
 
-// Main panel — status list + buttons
 function buildAttendanceMarkingMessage(attSession) {
   const allDone = attSession.attendees.every(a => a.status !== null);
 
@@ -88,7 +88,6 @@ function buildAttendanceMarkingMessage(attSession) {
   };
 }
 
-// Ephemeral "form" message using LabelBuilder — looks like a modal, isn't one
 function buildAttendanceFormMessage(attSession, page) {
   const pageAttendees = attSession.attendees.slice(page * 5, page * 5 + 5);
   const pages         = Math.ceil(attSession.attendees.length / 5);
@@ -106,7 +105,9 @@ function buildAttendanceFormMessage(attSession, page) {
     }),
   ];
 
-  const rows = pageAttendees.map(a =>
+  const textDisplay = new TextDisplayBuilder().setContent(lines.join('\n'));
+
+  const selectRows = pageAttendees.map(a =>
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`attendance:set_status:${attSession.sessionId}:${a.userId}`)
@@ -122,22 +123,20 @@ function buildAttendanceFormMessage(attSession, page) {
     )
   );
 
-  rows.push(
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`attendance:close_form:${attSession.sessionId}`)
-        .setLabel('Done')
-        .setEmoji('✅')
-        .setStyle(ButtonStyle.Success),
-    )
+  const doneRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`attendance:close_form:${attSession.sessionId}`)
+      .setLabel('Done')
+      .setEmoji('✅')
+      .setStyle(ButtonStyle.Success),
   );
 
   return {
-    content: lines.join('\n'),
-    components: rows,
-    flags: (1 << 6), // EPHEMERAL only, no Components V2
+    components: [textDisplay, ...selectRows, doneRow],
+    flags: (1 << 15) | (1 << 6),
   };
 }
+
 function buildAttendanceLog(attSession) {
   const now    = Math.floor(Date.now() / 1000);
   const groups = { present: [], late: [], excused: [], absent: [] };
