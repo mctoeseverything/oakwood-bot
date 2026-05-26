@@ -72,13 +72,8 @@ module.exports = {
       return interaction.reply(buildAttendanceFormMessage(attSession, page));
     }
 
-    if (action === 'close_form') {
-  return interaction.update({
-    components: [
-      new TextDisplayBuilder().setContent('✅ Done! You can dismiss this message.'),
-    ],
-    flags: (1 << 15) | (1 << 6),
-  });
+  if (action === 'close_form') {
+  return interaction.deferUpdate();
 }
 
     if (action === 'finalize') {
@@ -98,7 +93,7 @@ module.exports = {
     }
   },
 
-  async handleSelect(interaction, client) {
+async handleSelect(interaction, client) {
   const parts     = interaction.customId.split(':');
   const action    = parts[1];
   const sessionId = parts[2];
@@ -116,11 +111,11 @@ module.exports = {
   const page = attSession.attendees.findIndex(a => a.userId === userId);
   const pageNum = Math.floor(page / 5);
 
-  // Update the ephemeral form and refresh the main panel simultaneously
-  await Promise.all([
-    interaction.update(buildAttendanceFormMessage(attSession, pageNum)),
-    refreshAttendancePanel(client, attSession),
-  ]);
+  // Acknowledge immediately to beat the 3s deadline
+  await interaction.update(buildAttendanceFormMessage(attSession, pageNum));
+
+  // Then refresh the main panel (no deadline pressure now)
+  await refreshAttendancePanel(client, attSession);
 },
 };
 
