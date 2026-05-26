@@ -4,8 +4,9 @@ const {
   ButtonStyle,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
+  ContainerBuilder,
+  TextDisplayBuilder,
 } = require('discord.js');
-
 const ROLE_META = {
   'host':        { label: 'Host'        },
   'co-host':     { label: 'Co-Host'     },
