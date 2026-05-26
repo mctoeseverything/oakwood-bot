@@ -1,6 +1,7 @@
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
+  TextDisplayBuilder,
 } = require('discord.js');
 
 const { sessions } = require('../../utils/claimStore');
@@ -62,8 +63,13 @@ module.exports = {
     }
 
     if (action === 'close_form') {
-      return interaction.deferUpdate();
-    }
+  return interaction.update({
+    components: [
+      new TextDisplayBuilder().setContent('✅ Done! You can dismiss this message.'),
+    ],
+    flags: (1 << 15) | (1 << 6),
+  });
+}
 
     if (action === 'finalize') {
       const sessionId  = parts[2];
