@@ -82,10 +82,11 @@ function buildAttendanceMarkingMessage(attSession) {
     rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
   }
 
-  return {
-    components: [new TextDisplayBuilder().setContent(text), ...rows],
-    flags: (1 << 15) | (1 << 6),
-  };
+  // buildAttendanceMarkingMessage — remove the ephemeral flag
+return {
+  components: [new TextDisplayBuilder().setContent(text), ...rows],
+  flags: (1 << 15), // IS_COMPONENTS_V2 only, NOT ephemeral
+};
 }
 
 function buildAttendanceFormMessage(attSession, page) {
