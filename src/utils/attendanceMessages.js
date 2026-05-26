@@ -6,6 +6,8 @@ const {
   StringSelectMenuOptionBuilder,
   ContainerBuilder,
   TextDisplayBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
 } = require('discord.js');
 
 const ROLE_META = {
@@ -43,12 +45,27 @@ function buildAttendanceMarkingMessage(attSession) {
     return `> <@${a.userId}> — **${getRoleLabel(a.role)}** · ${badge}`;
   }).join('\n');
 
-  const text = [
-    `### 📋 Attendance — Session \`${attSession.sessionId}\``,
-    `Click **Mark Attendance** to open the marking form.`,
-    ``,
-    statusLines,
-  ].join('\n');
+  const headerText = attSession.finalized
+    ? `### ✅ Attendance Finalized — Session \`${attSession.sessionId}\``
+    : `### 📋 Attendance — Session \`${attSession.sessionId}\``;
+
+  const subText = attSession.finalized
+    ? `Attendance has been recorded and submitted.`
+    : `Click **Mark Attendance** to open the marking form.`;
+
+  const container = new ContainerBuilder()
+    .addTextDisplayComponents(t =>
+      t.setContent(`${headerText}\n${subText}`),
+    )
+    .addSeparatorComponents(s =>
+      s.setDivider(true).setSpacing(SeparatorSpacingSize.Small),
+    )
+    .addTextDisplayComponents(t =>
+      t.setContent(statusLines),
+    )
+    .addSeparatorComponents(s =>
+      s.setDivider(false).setSpacing(SeparatorSpacingSize.Small),
+    );
 
   const pages = Math.ceil(attSession.attendees.length / 5);
   const buttons = [];
@@ -82,31 +99,42 @@ function buildAttendanceMarkingMessage(attSession) {
     rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
   }
 
-  // buildAttendanceMarkingMessage — remove the ephemeral flag
-return {
-  components: [new TextDisplayBuilder().setContent(text), ...rows],
-  flags: (1 << 15), // IS_COMPONENTS_V2 only, NOT ephemeral
-};
+  const sessionIdDisplay = new TextDisplayBuilder()
+    .setContent(`Session ID: \`${attSession.sessionId}\``);
+
+  return {
+    components: [container, sessionIdDisplay, ...rows],
+    flags: (1 << 15),
+  };
 }
 
 function buildAttendanceFormMessage(attSession, page) {
   const pageAttendees = attSession.attendees.slice(page * 5, page * 5 + 5);
   const pages         = Math.ceil(attSession.attendees.length / 5);
   const title         = pages === 1
-    ? '📝 **Mark Attendance**'
-    : `📝 **Mark Attendance — Page ${page + 1}/${pages}**`;
+    ? '### 📝 Mark Attendance'
+    : `### 📝 Mark Attendance — Page ${page + 1}/${pages}`;
 
-  const lines = [
-    title,
-    `Session \`${attSession.sessionId}\` — select a status for each person below.`,
-    '',
-    ...pageAttendees.map(a => {
-      const badge = a.status ? `${STATUS_META[a.status].emoji} ${STATUS_META[a.status].label}` : '⬜ Unmarked';
-      return `**${getRoleLabel(a.role)}** — <@${a.userId}> · ${badge}`;
-    }),
-  ];
+  const statusLines = pageAttendees.map(a => {
+    const badge = a.status
+      ? `${STATUS_META[a.status].emoji} ${STATUS_META[a.status].label}`
+      : '⬜ Unmarked';
+    return `> **${getRoleLabel(a.role)}** — <@${a.userId}> · ${badge}`;
+  }).join('\n');
 
-  const textDisplay = new TextDisplayBuilder().setContent(lines.join('\n'));
+  const container = new ContainerBuilder()
+    .addTextDisplayComponents(t =>
+      t.setContent(`${title}\nSession \`${attSession.sessionId}\` — select a status for each person below.`),
+    )
+    .addSeparatorComponents(s =>
+      s.setDivider(true).setSpacing(SeparatorSpacingSize.Small),
+    )
+    .addTextDisplayComponents(t =>
+      t.setContent(statusLines),
+    )
+    .addSeparatorComponents(s =>
+      s.setDivider(false).setSpacing(SeparatorSpacingSize.Small),
+    );
 
   const selectRows = pageAttendees.map(a =>
     new ActionRowBuilder().addComponents(
@@ -133,7 +161,7 @@ function buildAttendanceFormMessage(attSession, page) {
   );
 
   return {
-    components: [textDisplay, ...selectRows, doneRow],
+    components: [container, ...selectRows, doneRow],
     flags: (1 << 15) | (1 << 6),
   };
 }
@@ -150,20 +178,31 @@ function buildAttendanceLog(attSession) {
     return [`**${emoji} ${label}**`, ...entries.map(a => `> <@${a.userId}> — ${getRoleLabel(a.role)}`)].join('\n');
   }
 
-  const text = [
-    `### 📋 Attendance Log — Session \`${attSession.sessionId}\``,
-    `> **Host:** <@${attSession.hostId}>`,
-    `> **Recorded:** <t:${now}:F>`,
-    `> **Total:** ${attSession.attendees.length}`,
-    ``,
+  const sections = [
     fmt('✅', 'Present', groups.present),
     fmt('🕐', 'Late',    groups.late),
     fmt('🟡', 'Excused', groups.excused),
     fmt('❌', 'Absent',  groups.absent),
-  ].filter(Boolean).join('\n');
+  ].filter(Boolean);
+
+  const container = new ContainerBuilder()
+    .addTextDisplayComponents(t =>
+      t.setContent(
+        `### 📋 Attendance Log — Session \`${attSession.sessionId}\`\n` +
+        `> **Host:** <@${attSession.hostId}>\n` +
+        `> **Recorded:** <t:${now}:F>\n` +
+        `> **Total Attendees:** ${attSession.attendees.length}`,
+      ),
+    )
+    .addSeparatorComponents(s =>
+      s.setDivider(true).setSpacing(SeparatorSpacingSize.Small),
+    )
+    .addTextDisplayComponents(t =>
+      t.setContent(sections.join('\n\n')),
+    );
 
   return {
-    components: [new ContainerBuilder().addTextDisplayComponents(t => t.setContent(text))],
+    components: [container],
     flags: (1 << 15),
   };
 }
