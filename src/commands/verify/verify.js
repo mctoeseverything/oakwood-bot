@@ -50,7 +50,6 @@ module.exports = {
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setLabel('Open Session')
-          .setEmoji('🔗')
           .setStyle(ButtonStyle.Link)
           .setURL(url),
         new ButtonBuilder()
@@ -89,7 +88,6 @@ async function handlePanel(interaction) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setLabel('Help & Instructions')
-      .setEmoji('🔗')
       .setStyle(ButtonStyle.Link)
       .setURL('https://discord.com/channels/1427496000137728032/1432571138894205090'),
   );
