@@ -18,19 +18,39 @@ const PORT = process.env.VERIFY_PORT || 3001;
 
 // ── Step 1: Redirect user to Discord OAuth2 ──────────────────────────────
 app.get('/verify', (req, res) => {
+  const { token, appId } = req.query;
+
+  // Pass token + appId through OAuth2 state so we get it back in /callback
+  const state = token && appId
+    ? Buffer.from(JSON.stringify({ token, appId })).toString('base64')
+    : '';
+
   const params = new URLSearchParams({
     client_id:     CLIENT_ID,
     redirect_uri:  REDIRECT_URI,
     response_type: 'code',
     scope:         'identify',
+    ...(state && { state }),
   });
+
   res.redirect(`https://discord.com/oauth2/authorize?${params}`);
 });
 
 // ── Step 2: Discord redirects back with a code ───────────────────────────
 app.get('/callback', async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
   if (!code) return res.send('<h2>❌ No code provided.</h2>');
+
+  // Decode state to get interaction token + appId
+  let interactionToken = null;
+  let appId = null;
+  if (state) {
+    try {
+      const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf8'));
+      interactionToken = decoded.token;
+      appId = decoded.appId;
+    } catch {}
+  }
 
   try {
     // Exchange code for access token
@@ -55,10 +75,10 @@ app.get('/callback', async (req, res) => {
 
     const { id, username } = userRes.data;
 
-    // Save to DB (or retrieve existing record)
+    // Save to DB
     const { member, isNew } = addMember(id, username);
 
-    // Assign verified role via Discord REST API (no need for bot.js import)
+    // Assign verified role
     if (VERIFIED_ROLE_ID && GUILD_ID) {
       try {
         await axios.put(
@@ -71,16 +91,45 @@ app.get('/callback', async (req, res) => {
       }
     }
 
-    const heading  = isNew ? '✅ Verified!' : '✅ Already Verified';
-    const subtext  = isNew
-      ? `You've been successfully verified and assigned your Member ID.`
-      : `You were already verified. Here are your details.`;
+    // Edit the ephemeral "Verification Session Active" message to show success
+    if (interactionToken && appId) {
+      try {
+        const successComponents = [
+          {
+            type: 17, // Container
+            components: [
+              {
+                type: 10, // TextDisplay
+                content: `### 🟢 Verification Successful\nThe verification process has been completed and you have been granted access to the server. Your accounts below were linked.`,
+              },
+              {
+                type: 14, // Separator
+                divider: true,
+                spacing: 2,
+              },
+              {
+                type: 10, // TextDisplay
+                content: `> Discord Account: <@${id}>`,
+              },
+            ],
+          },
+        ];
+
+        await axios.patch(
+          `https://discord.com/api/v10/webhooks/${appId}/${interactionToken}/messages/@original`,
+          { components: successComponents, flags: (1 << 15) },
+          { headers: { 'Content-Type': 'application/json' } }
+        );
+      } catch (editErr) {
+        console.error('[Verify] Failed to edit message:', editErr.response?.data ?? editErr.message);
+      }
+    }
 
     res.send(`
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Oakwood Shopping — Verified</title>
+          <title>Amber Corporation — Verified</title>
           <style>
             body { font-family: sans-serif; background: #1e1f22; color: #fff; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
             .card { background: #2b2d31; border-radius: 12px; padding: 40px 48px; max-width: 420px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
@@ -92,8 +141,8 @@ app.get('/callback', async (req, res) => {
         </head>
         <body>
           <div class="card">
-            <h2>${heading}</h2>
-            <p>${subtext}</p>
+            <h2>✅ ${isNew ? 'Verified!' : 'Already Verified'}</h2>
+            <p>${isNew ? "You've been successfully verified." : 'You were already verified.'}</p>
             <div class="id">${member.member_id}</div>
             <p>Welcome, <b>${username}</b></p>
             <p class="close">You can close this tab.</p>

@@ -43,16 +43,16 @@ module.exports = {
 
     if (action === 'begin') {
       const baseUrl = process.env.VERIFY_URL || `http://localhost:${process.env.PORT || 3000}`;
-      const url     = `${baseUrl}/verify`;
+
+      // Pass the interaction token so server.js can edit this message after OAuth2
+      const url = `${baseUrl}/verify?token=${interaction.token}&appId=${client.user.id}`;
 
       const row = new ActionRowBuilder().addComponents(
-        // Link buttons use setURL, no customId
         new ButtonBuilder()
           .setLabel('Open Session')
           .setEmoji('🔗')
           .setStyle(ButtonStyle.Link)
           .setURL(url),
-        // Disabled danger button — no URL, just a customId placeholder
         new ButtonBuilder()
           .setCustomId('verify:noop')
           .setLabel('Never share this link with someone else!')

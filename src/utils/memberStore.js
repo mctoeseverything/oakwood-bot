@@ -13,8 +13,16 @@ db.exec(`
 `);
 
 function generateMemberId() {
-  const count = db.prepare('SELECT COUNT(*) as c FROM members').get().c;
-  return `M-${String(count + 1).padStart(5, '0')}`;
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let id;
+  do {
+    id = '';
+    for (let i = 0; i < 6; i++) {
+      id += chars[Math.floor(Math.random() * chars.length)];
+    }
+    id = id.toUpperCase();
+  } while (db.prepare('SELECT 1 FROM members WHERE member_id = ?').get(id));
+  return id;
 }
 
 function addMember(discordId, discordName) {
