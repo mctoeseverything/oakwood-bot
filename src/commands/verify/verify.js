@@ -1,18 +1,27 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const {
+  SlashCommandBuilder,
+  PermissionFlagsBits,
+  ContainerBuilder,
+  TextDisplayBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} = require('discord.js');
 const { getMemberByDiscordId, getMemberById } = require('../../utils/memberStore');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('verify')
     .setDescription('Verification commands')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
 
-    // /verify link — sends the user their verification link
     .addSubcommand(sub =>
       sub
-        .setName('link')
-        .setDescription('Get your verification link to link your Discord account'))
+        .setName('panel')
+        .setDescription('Post the verification panel in this channel'))
 
-    // /verify whois — look up a verified member
     .addSubcommand(sub =>
       sub
         .setName('whois')
@@ -26,26 +35,76 @@ module.exports = {
 
   async execute(interaction, client) {
     const sub = interaction.options.getSubcommand();
-
-    if (sub === 'link') return handleLink(interaction);
+    if (sub === 'panel') return handlePanel(interaction);
     if (sub === 'whois') return handleWhois(interaction);
+  },
+
+  async handleButton(interaction, client) {
+    const parts  = interaction.customId.split(':');
+    const action = parts[1];
+
+    if (action === 'begin') {
+      const baseUrl = process.env.VERIFY_URL || `http://localhost:${process.env.PORT || 3000}`;
+      const url     = `${baseUrl}/verify`;
+
+      const container = new ContainerBuilder()
+        .addTextDisplayComponents(t =>
+          t.setContent(
+            `### 🔵 Verification Session Active\nPlease click the button below to open your verification session. This link will expire in 10 minutes.`,
+          ),
+        )
+        .addSeparatorComponents(s =>
+          s.setDivider(true).setSpacing(SeparatorSpacingSize.Large),
+        );
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setLabel('Open Session')
+          .setEmoji('🔗')
+          .setStyle(ButtonStyle.Secondary)
+          .setURL(url),
+        new ButtonBuilder()
+          .setCustomId('verify:warning')
+          .setLabel('Never share this link with someone else!')
+          .setEmoji('⚠️')
+          .setStyle(ButtonStyle.Danger)
+          .setDisabled(true),
+      );
+
+      return interaction.reply({
+        components: [container, row],
+        flags: (1 << 15) | (1 << 6),
+      });
+    }
   },
 };
 
-async function handleLink(interaction) {
-  const baseUrl = process.env.VERIFY_URL || `http://localhost:${process.env.PORT || 3000}`;
-  const url = `${baseUrl}/verify`;
+async function handlePanel(interaction) {
+  const container = new ContainerBuilder()
+    .addTextDisplayComponents(t =>
+      t.setContent(
+        `### 🌐 Server Verification\nTo verify your identity and gain access to our server, please verify your Discord account and your Roblox account. We do not store sensitive information.`,
+      ),
+    )
+    .addSeparatorComponents(s =>
+      s.setDivider(true).setSpacing(SeparatorSpacingSize.Large),
+    );
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('verify:begin')
+      .setLabel('Begin Verification')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setLabel('Help & Instructions')
+      .setEmoji('🔗')
+      .setStyle(ButtonStyle.Link)
+      .setURL('https://discord.com/channels/1427496000137728032/1432571138894205090'),
+  );
 
   await interaction.reply({
-    content: [
-      `### 🔐 Verify Your Account`,
-      `Click the link below to verify your Discord account and receive your Member ID.`,
-      ``,
-      `> **${url}**`,
-      ``,
-      `*This links your Discord account to the Oakwood Shopping member system.*`,
-    ].join('\n'),
-    ephemeral: true,
+    components: [container, row],
+    flags: (1 << 15),
   });
 }
 
@@ -56,7 +115,7 @@ async function handleWhois(interaction) {
   if (!user && !memberId) {
     return interaction.reply({
       content: '⚠️ Please provide either a user or a Member ID.',
-      ephemeral: true,
+      flags: (1 << 6),
     });
   }
 
@@ -67,7 +126,7 @@ async function handleWhois(interaction) {
   if (!record) {
     return interaction.reply({
       content: `⚠️ No verified member found.`,
-      ephemeral: true,
+      flags: (1 << 6),
     });
   }
 
@@ -78,6 +137,6 @@ async function handleWhois(interaction) {
       `> **Discord:** <@${record.discord_id}> (${record.discord_name})`,
       `> **Verified:** <t:${Math.floor(new Date(record.joined_at).getTime() / 1000)}:D>`,
     ].join('\n'),
-    ephemeral: true,
+    flags: (1 << 6),
   });
 }
