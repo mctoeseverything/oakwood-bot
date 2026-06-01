@@ -105,9 +105,14 @@ async function handlePanel(interaction) {
     )
     .addActionRowComponents(() => row);
 
-  await interaction.reply({
+  await interaction.channel.send({
     components: [container],
     flags: (1 << 15),
+  });
+
+  await interaction.reply({
+    content: '✅ Verification panel posted.',
+    flags: (1 << 6),
   });
 }
 
