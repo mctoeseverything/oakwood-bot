@@ -2,8 +2,6 @@ const {
   SlashCommandBuilder,
   PermissionFlagsBits,
   ContainerBuilder,
-  TextDisplayBuilder,
-  SeparatorBuilder,
   SeparatorSpacingSize,
   ActionRowBuilder,
   ButtonBuilder,
@@ -47,6 +45,22 @@ module.exports = {
       const baseUrl = process.env.VERIFY_URL || `http://localhost:${process.env.PORT || 3000}`;
       const url     = `${baseUrl}/verify`;
 
+      const row = new ActionRowBuilder().addComponents(
+        // Link buttons use setURL, no customId
+        new ButtonBuilder()
+          .setLabel('Open Session')
+          .setEmoji('🔗')
+          .setStyle(ButtonStyle.Link)
+          .setURL(url),
+        // Disabled danger button — no URL, just a customId placeholder
+        new ButtonBuilder()
+          .setCustomId('verify:noop')
+          .setLabel('Never share this link with someone else!')
+          .setEmoji('⚠️')
+          .setStyle(ButtonStyle.Danger)
+          .setDisabled(true),
+      );
+
       const container = new ContainerBuilder()
         .addTextDisplayComponents(t =>
           t.setContent(
@@ -55,41 +69,19 @@ module.exports = {
         )
         .addSeparatorComponents(s =>
           s.setDivider(true).setSpacing(SeparatorSpacingSize.Large),
-        );
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setLabel('Open Session')
-          .setEmoji('🔗')
-          .setStyle(ButtonStyle.Secondary)
-          .setURL(url),
-        new ButtonBuilder()
-          .setCustomId('verify:warning')
-          .setLabel('Never share this link with someone else!')
-          .setEmoji('⚠️')
-          .setStyle(ButtonStyle.Danger)
-          .setDisabled(true),
-      );
+        )
+        .addActionRowComponents(() => row);
 
       return interaction.reply({
-        components: [container, row],
+        components: [container],
         flags: (1 << 15) | (1 << 6),
       });
     }
   },
 };
 
+// ── Post the panel ────────────────────────────────────────────────────────────
 async function handlePanel(interaction) {
-  const container = new ContainerBuilder()
-    .addTextDisplayComponents(t =>
-      t.setContent(
-        `### 🌐 Server Verification\nTo verify your identity and gain access to our server, please verify your Discord account and your Roblox account. We do not store sensitive information.`,
-      ),
-    )
-    .addSeparatorComponents(s =>
-      s.setDivider(true).setSpacing(SeparatorSpacingSize.Large),
-    );
-
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('verify:begin')
@@ -102,12 +94,24 @@ async function handlePanel(interaction) {
       .setURL('https://discord.com/channels/1427496000137728032/1432571138894205090'),
   );
 
+  const container = new ContainerBuilder()
+    .addTextDisplayComponents(t =>
+      t.setContent(
+        `### 🌐 Server Verification\nTo verify your identity and gain access to our server, please verify your Discord account and your Roblox account. We do not store sensitive information.`,
+      ),
+    )
+    .addSeparatorComponents(s =>
+      s.setDivider(true).setSpacing(SeparatorSpacingSize.Large),
+    )
+    .addActionRowComponents(() => row);
+
   await interaction.reply({
-    components: [container, row],
+    components: [container],
     flags: (1 << 15),
   });
 }
 
+// ── Whois lookup ──────────────────────────────────────────────────────────────
 async function handleWhois(interaction) {
   const user     = interaction.options.getUser('user');
   const memberId = interaction.options.getString('memberid');
