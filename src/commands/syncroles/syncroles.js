@@ -3,9 +3,8 @@ const {
   ContainerBuilder,
   SeparatorSpacingSize,
 } = require('discord.js');
-const axios = require('axios');
 const { getMemberByDiscordId } = require('../../utils/memberStore');
-const { ROBLOX_GROUP_ID, RANK_TO_ROLE, MANAGED_ROLE_IDS } = require('../../utils/rolesConfig');
+const { syncRoles } = require('../../utils/syncRolesUtil');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,7 +14,6 @@ module.exports = {
   async execute(interaction, client) {
     await interaction.deferReply({ flags: (1 << 6) });
 
-    // Check they're verified
     const record = getMemberByDiscordId(interaction.user.id);
     if (!record || !record.roblox_id) {
       return interaction.editReply({
@@ -25,49 +23,19 @@ module.exports = {
 
     try {
       const member = await interaction.guild.members.fetch(interaction.user.id);
-
-      // Fetch their rank in the Roblox group
-      const groupRes = await axios.get(
-        `https://groups.roblox.com/v2/users/${record.roblox_id}/groups/roles`,
-      );
-
-      const groupData = groupRes.data.data;
-      const groupEntry = groupData.find(g => String(g.group.id) === String(ROBLOX_GROUP_ID));
-      const rankNumber = groupEntry?.role?.rank ?? 0;
-
-      // Check if user is in the group at all
-      const inGroup = !!groupEntry;
-
-      // Work out which roles to add and remove
-      const addedRoles   = [];
-      const removedRoles = [];
-
-      for (const [rank, discordRoleId] of Object.entries(RANK_TO_ROLE)) {
-        const hasRole    = member.roles.cache.has(discordRoleId);
-        const shouldHave = inGroup && String(rankNumber) === String(rank);
-
-        if (shouldHave && !hasRole) {
-          await member.roles.add(discordRoleId);
-          addedRoles.push(discordRoleId);
-        } else if (!shouldHave && hasRole && MANAGED_ROLE_IDS.includes(discordRoleId)) {
-          await member.roles.remove(discordRoleId);
-          removedRoles.push(discordRoleId);
-        }
-      }
+      const { addedRoles, removedRoles, inGroup, hasBinding, rankName } =
+        await syncRoles(member, record.roblox_id);
 
       // Build result text
       const lines = [];
-
       if (!inGroup) {
-        // Not in the group at all
         lines.push(`*You are not in the Roblox group. No roles were assigned.*`);
         if (removedRoles.length > 0) {
           lines.push('');
           for (const id of removedRoles) lines.push(`➖ <@&${id}>`);
         }
-      } else if (!RANK_TO_ROLE[rankNumber]) {
-        // In the group but no role binding exists for their rank
-        lines.push(`*No role binding exists for your current group rank (${groupEntry.role.name}). Please contact an administrator.*`);
+      } else if (!hasBinding) {
+        lines.push(`*No role binding exists for your current group rank (${rankName}). Please contact an administrator.*`);
         if (removedRoles.length > 0) {
           lines.push('');
           for (const id of removedRoles) lines.push(`➖ <@&${id}>`);

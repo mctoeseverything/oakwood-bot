@@ -14,11 +14,10 @@ db.exec(`
   )
 `);
 
-// Add roblox columns if upgrading from old schema
-try {
-  db.exec(`ALTER TABLE members ADD COLUMN roblox_id TEXT`);
-  db.exec(`ALTER TABLE members ADD COLUMN roblox_name TEXT`);
-} catch {}
+// Add roblox columns if upgrading from old schema (safe no-op if already exist)
+const existingCols = db.prepare(`PRAGMA table_info(members)`).all().map(c => c.name);
+if (!existingCols.includes('roblox_id'))   db.exec(`ALTER TABLE members ADD COLUMN roblox_id TEXT`);
+if (!existingCols.includes('roblox_name')) db.exec(`ALTER TABLE members ADD COLUMN roblox_name TEXT`);
 
 function generateMemberId() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
