@@ -72,4 +72,8 @@ function getMemberByRobloxId(robloxId) {
   return db.prepare('SELECT * FROM members WHERE roblox_id = ?').get(robloxId);
 }
 
-module.exports = { addMember, getMemberByDiscordId, getMemberById, getMemberByRobloxId };
+function removeMember(discordId) {
+  db.prepare('DELETE FROM members WHERE discord_id = ?').run(discordId);
+}
+
+module.exports = { addMember, getMemberByDiscordId, getMemberById, getMemberByRobloxId, removeMember };
