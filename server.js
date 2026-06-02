@@ -16,6 +16,78 @@ const {
 
 const PORT = process.env.VERIFY_PORT || 3001;
 
+// ── Privacy Policy ──────────────────────────────────────────────────────────
+app.get('/privacy', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Amber Corporation — Privacy Policy</title>
+        <style>
+          body { font-family: sans-serif; background: #1e1f22; color: #dbdee1; max-width: 720px; margin: 60px auto; padding: 0 24px; line-height: 1.7; }
+          h1 { color: #fff; } h2 { color: #fff; margin-top: 32px; }
+          a { color: #5865f2; } p { color: #b5bac1; }
+        </style>
+      </head>
+      <body>
+        <h1>Privacy Policy</h1>
+        <p>Last updated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+
+        <h2>What We Collect</h2>
+        <p>When you verify through Amber Corporation, we collect and store your Discord user ID, Discord username, and (once Roblox verification is enabled) your Roblox user ID and username.</p>
+
+        <h2>How We Use It</h2>
+        <p>This information is used solely to link your Discord and Roblox accounts for the purpose of granting access to the Amber Corporation Discord server. We do not sell, share, or distribute your data to any third parties.</p>
+
+        <h2>Data Storage</h2>
+        <p>Your data is stored securely and is only accessible to Amber Corporation server administrators.</p>
+
+        <h2>Data Removal</h2>
+        <p>You may request removal of your data at any time by contacting a server administrator.</p>
+
+        <h2>Contact</h2>
+        <p>For any privacy concerns, please reach out via our Discord server.</p>
+      </body>
+    </html>
+  `);
+});
+
+// ── Terms of Service ─────────────────────────────────────────────────────────
+app.get('/terms', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Amber Corporation — Terms of Service</title>
+        <style>
+          body { font-family: sans-serif; background: #1e1f22; color: #dbdee1; max-width: 720px; margin: 60px auto; padding: 0 24px; line-height: 1.7; }
+          h1 { color: #fff; } h2 { color: #fff; margin-top: 32px; }
+          a { color: #5865f2; } p { color: #b5bac1; }
+        </style>
+      </head>
+      <body>
+        <h1>Terms of Service</h1>
+        <p>Last updated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+
+        <h2>Acceptance</h2>
+        <p>By using the Amber Corporation verification system, you agree to these terms.</p>
+
+        <h2>Use of Service</h2>
+        <p>This verification system is intended solely for members of the Amber Corporation Discord server. You agree to provide accurate account information during verification.</p>
+
+        <h2>Account Linking</h2>
+        <p>By verifying, you consent to your Discord and Roblox accounts being linked in our system for the purpose of server access management.</p>
+
+        <h2>Termination</h2>
+        <p>Amber Corporation reserves the right to revoke server access at any time for violations of server rules.</p>
+
+        <h2>Contact</h2>
+        <p>For any questions, please reach out via our Discord server.</p>
+      </body>
+    </html>
+  `);
+});
+
 // ── Step 1: Redirect user to Discord OAuth2 ──────────────────────────────
 app.get('/verify', (req, res) => {
   const { token, appId } = req.query;
