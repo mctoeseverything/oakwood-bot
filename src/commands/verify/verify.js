@@ -50,6 +50,7 @@ module.exports = {
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setLabel('Open Session')
+          .setEmoji('🔗')
           .setStyle(ButtonStyle.Link)
           .setURL(url),
         new ButtonBuilder()
@@ -88,6 +89,7 @@ async function handlePanel(interaction) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setLabel('Help & Instructions')
+      .setEmoji('🔗')
       .setStyle(ButtonStyle.Link)
       .setURL('https://discord.com/channels/1427496000137728032/1432571138894205090'),
   );
@@ -142,6 +144,7 @@ async function handleWhois(interaction) {
       `### 🪪 Member Lookup`,
       `> **Member ID:** \`${record.member_id}\``,
       `> **Discord:** <@${record.discord_id}> (${record.discord_name})`,
+      record.roblox_name ? `> **Roblox:** @${record.roblox_name}` : `> **Roblox:** Not linked yet`,
       `> **Verified:** <t:${Math.floor(new Date(record.joined_at).getTime() / 1000)}:D>`,
     ].join('\n'),
     flags: (1 << 6),
