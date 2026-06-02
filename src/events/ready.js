@@ -5,6 +5,6 @@ module.exports = {
   once: true,
   execute(client) {
     console.log(`\n✅ Oakwood Bot is online as ${client.user.tag}`);
-    client.user.setActivity('Oakwood Shopping', { type: ActivityType.Watching });
+    client.user.setActivity('Amber Corporation', { type: ActivityType.Watching });
   },
 };

@@ -161,4 +161,17 @@ app.get('/callback', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`[Verify] OAuth2 server running on http://localhost:${PORT}`);
+
+  // Ping self every 10 minutes to prevent Render from spinning down
+  const selfUrl = process.env.VERIFY_URL;
+  if (selfUrl) {
+    setInterval(async () => {
+      try {
+        await axios.get(selfUrl);
+        console.log('[Keep-Alive] Pinged verify service');
+      } catch (err) {
+        console.error('[Keep-Alive] Ping failed:', err.message);
+      }
+    }, 10 * 60 * 1000);
+  }
 });
