@@ -14,7 +14,7 @@ module.exports = {
   async execute(interaction, client) {
     await interaction.deferReply({ flags: (1 << 6) });
 
-    const record = getMemberByDiscordId(interaction.user.id);
+    const record = await getMemberByDiscordId(interaction.user.id);
     if (!record || !record.roblox_id) {
       return interaction.editReply({
         content: '⚠️ You need to verify your Roblox account first before syncing roles.',
