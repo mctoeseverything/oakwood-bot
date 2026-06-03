@@ -7,6 +7,7 @@ const {
   ButtonStyle,
 } = require('discord.js');
 const { getMemberByDiscordId, removeMember } = require('../../utils/memberStore');
+const { logUnverified } = require('../../utils/logger');
 const { MANAGED_ROLE_IDS } = require('../../utils/rolesConfig');
 
 module.exports = {
@@ -103,6 +104,8 @@ module.exports = {
         .addTextDisplayComponents(t =>
           t.setContent(`### 🔴 Unverified\nYour verification status has been revoked. You can verify again at any time.`),
         );
+
+      await logUnverified({ discordId: interaction.user.id, discordName: interaction.user.username, memberId: record.member_id, by: interaction.user.id });
 
       return interaction.update({
         components: [container],

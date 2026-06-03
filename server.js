@@ -19,6 +19,24 @@ const {
 
 const PORT = process.env.VERIFY_PORT || 3001;
 
+// ── Log helper (uses Discord API directly since no bot client here) ──────────
+async function sendVerifyLog({ emoji, title, lines }) {
+  const logChannelId = process.env.LOG_CHANNEL_ID;
+  if (!logChannelId || !BOT_TOKEN) return;
+  try {
+    const now  = Math.floor(Date.now() / 1000);
+    const body = lines.map(l => `> ${l}`).join('\n');
+    const text = `### ${emoji} ${title}\n> <t:${now}:F>\n\n${body}`;
+    await axios.post(
+      `https://discord.com/api/v10/channels/${logChannelId}/messages`,
+      { content: text },
+      { headers: { Authorization: `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' } }
+    );
+  } catch (err) {
+    console.error('[Logger] Failed to send log:', err.message);
+  }
+}
+
 // ── Health check (for keep-alive ping) ──────────────────────────────────────
 app.get('/health', (req, res) => res.send('OK'));
 
@@ -143,6 +161,7 @@ app.get('/callback', async (req, res) => {
 
     // Check Discord blacklist
     if (await isBlacklisted('discord', discordId)) {
+      await sendVerifyLog({ emoji: '⛔', title: 'Verification Blocked (Blacklisted)', lines: [`**Type:** Discord ID`, `**Account ID:** \`${discordId}\``] });
       return res.send('<h2>❌ Something went wrong during verification. Please try again.</h2>');
     }
 
@@ -215,6 +234,7 @@ app.get('/roblox-callback', async (req, res) => {
 
     // Check Roblox blacklist
     if (await isBlacklisted('roblox', robloxId)) {
+      await sendVerifyLog({ emoji: '⛔', title: 'Verification Blocked (Blacklisted)', lines: [`**Type:** Roblox ID`, `**Account ID:** \`${robloxId}\``] });
       return res.send('<h2>❌ Something went wrong during verification. Please try again.</h2>');
     }
 
@@ -316,6 +336,16 @@ app.get('/roblox-callback', async (req, res) => {
     `);
 
     console.log(`[Verify] ${isNew ? 'New' : 'Returning'} member: ${discordUsername} + @${robloxUsername} → ${member.member_id}`);
+
+    await sendVerifyLog({
+      emoji: '✅',
+      title: isNew ? 'User Verified' : 'User Re-Verified',
+      lines: [
+        `**Member ID:** \`${member.member_id}\``,
+        `**Discord:** @${discordUsername} (ID: \`${discordId}\`)`,
+        `**Roblox:** @${robloxUsername} (ID: \`${robloxId}\`)`,
+      ],
+    });
 
     // Auto-sync Roblox group roles (non-blocking, runs after page is sent)
     try {

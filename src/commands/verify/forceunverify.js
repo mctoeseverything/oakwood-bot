@@ -1,9 +1,12 @@
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
+  ContainerBuilder,
+  SeparatorSpacingSize,
 } = require('discord.js');
 const { getMemberByDiscordId, removeMember } = require('../../utils/memberStore');
 const { MANAGED_ROLE_IDS, ADMIN_ROLE_IDS } = require('../../utils/rolesConfig');
+const { logForceUnverified } = require('../../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -57,14 +60,27 @@ module.exports = {
       console.error('[ForceUnverify] Failed to update roles/nickname:', err.message);
     }
 
+    const container = new ContainerBuilder()
+      .addTextDisplayComponents(t =>
+        t.setContent('### ✅ Force Unverified'),
+      )
+      .addSeparatorComponents(s =>
+        s.setDivider(true).setSpacing(SeparatorSpacingSize.Large),
+      )
+      .addTextDisplayComponents(t =>
+        t.setContent([
+          `> **User:** <@${target.id}>`,
+          `> **Member ID:** \`${record.member_id}\` *(preserved)*`,
+          `> **Reason:** ${reason}`,
+          `> **By:** <@${interaction.user.id}>`,
+        ].join('\n')),
+      );
+
+    await logForceUnverified({ discordId: target.id, discordName: target.username, memberId: record.member_id, by: interaction.user.id, reason });
+
     return interaction.editReply({
-      content: [
-        `### ✅ Force Unverified`,
-        `> **User:** <@${target.id}>`,
-        `> **Member ID:** \`${record.member_id}\` *(preserved)*`,
-        `> **Reason:** ${reason}`,
-        `> **By:** <@${interaction.user.id}>`,
-      ].join('\n'),
+      components: [container],
+      flags: (1 << 15),
     });
   },
 };

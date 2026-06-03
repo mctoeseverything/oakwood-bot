@@ -7,6 +7,7 @@ const {
 const { ADMIN_ROLE_IDS } = require('../../utils/rolesConfig');
 const { getMemberByDiscordId } = require('../../utils/memberStore');
 const { syncRoles } = require('../../utils/syncRolesUtil');
+const { logForceSync } = require('../../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -43,6 +44,8 @@ module.exports = {
 
       // Set nickname to Roblox username
       await member.setNickname(record.roblox_name).catch(() => {});
+
+      await logForceSync({ discordId: target.id, robloxName: record.roblox_name, memberId: record.member_id, by: interaction.user.id, addedRoles, removedRoles });
 
       const lines = [];
       if (!inGroup) {

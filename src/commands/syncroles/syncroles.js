@@ -5,6 +5,7 @@ const {
 } = require('discord.js');
 const { getMemberByDiscordId } = require('../../utils/memberStore');
 const { syncRoles } = require('../../utils/syncRolesUtil');
+const { logSyncRoles } = require('../../utils/logger');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -70,6 +71,8 @@ module.exports = {
 
       // Set nickname to Roblox username
       await member.setNickname(record.roblox_name).catch(() => {});
+
+      await logSyncRoles({ discordId: interaction.user.id, robloxName: record.roblox_name, memberId: record.member_id, addedRoles, removedRoles });
 
       return interaction.editReply({
         components: [container],
