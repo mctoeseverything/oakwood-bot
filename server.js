@@ -220,29 +220,6 @@ app.get('/roblox-callback', async (req, res) => {
       }
     }
 
-    // Auto-sync Roblox group roles
-    try {
-      const { RANK_TO_ROLE, ROBLOX_GROUP_ID, MANAGED_ROLE_IDS } = require('./src/utils/rolesConfig');
-      const groupRes = await axios.get(
-        `https://groups.roblox.com/v2/users/${robloxId}/groups/roles`,
-      );
-      const groupEntry = groupRes.data.data.find(g => String(g.group.id) === String(ROBLOX_GROUP_ID));
-      const rankNumber = groupEntry?.role?.rank ?? 0;
-
-      for (const [rank, discordRoleId] of Object.entries(RANK_TO_ROLE)) {
-        const shouldHave = groupEntry && String(rankNumber) === String(rank);
-        if (shouldHave) {
-          await axios.put(
-            `https://discord.com/api/guilds/${GUILD_ID}/members/${discordId}/roles/${discordRoleId}`,
-            {},
-            { headers: { Authorization: `Bot ${BOT_TOKEN}` } }
-          ).catch(() => {});
-        }
-      }
-    } catch (syncErr) {
-      console.error('[Verify] Auto role sync failed:', syncErr.message);
-    }
-
     // Edit the ephemeral Discord message to show success
     if (interactionToken && appId) {
       try {
@@ -305,6 +282,29 @@ app.get('/roblox-callback', async (req, res) => {
     `);
 
     console.log(`[Verify] ${isNew ? 'New' : 'Returning'} member: ${discordUsername} + @${robloxUsername} → ${member.member_id}`);
+
+    // Auto-sync Roblox group roles (non-blocking, runs after page is sent)
+    try {
+      const { RANK_TO_ROLE, ROBLOX_GROUP_ID } = require('./src/utils/rolesConfig');
+      const groupRes = await axios.get(
+        `https://groups.roblox.com/v2/users/${robloxId}/groups/roles`,
+      );
+      const groupEntry = groupRes.data.data.find(g => String(g.group.id) === String(ROBLOX_GROUP_ID));
+      const rankNumber = groupEntry?.role?.rank ?? 0;
+
+      for (const [rank, discordRoleId] of Object.entries(RANK_TO_ROLE)) {
+        const shouldHave = groupEntry && String(rankNumber) === String(rank);
+        if (shouldHave) {
+          await axios.put(
+            `https://discord.com/api/guilds/${GUILD_ID}/members/${discordId}/roles/${discordRoleId}`,
+            {},
+            { headers: { Authorization: `Bot ${BOT_TOKEN}` } }
+          ).catch(() => {});
+        }
+      }
+    } catch (syncErr) {
+      console.error('[Verify] Auto role sync failed:', syncErr.message);
+    }
 
   } catch (err) {
     console.error('[Verify] Roblox OAuth error:', err.response?.data ?? err.message);
