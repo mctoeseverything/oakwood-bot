@@ -3,6 +3,7 @@ const express = require('express');
 const axios   = require('axios');
 const { addMember } = require('./src/utils/memberStore');
 const { isBlacklisted } = require('./src/utils/blacklistStore');
+const { addFlag, getFlagCount } = require('./src/utils/flagStore');
 
 const app = express();
 
@@ -161,7 +162,26 @@ app.get('/callback', async (req, res) => {
 
     // Check Discord blacklist
     if (await isBlacklisted('discord', discordId)) {
-      await sendVerifyLog({ emoji: '⛔', title: 'Verification Blocked (Blacklisted)', lines: [`**Type:** Discord ID`, `**Account ID:** \`${discordId}\``] });
+      // Alert if re-verifying member has flags
+    try {
+      const flagCount = await getFlagCount(member.member_id);
+      if (!isNew && flagCount > 0) {
+        await sendVerifyLog({
+          emoji: '⚠️',
+          title: 'Flagged Member Re-Verified',
+          lines: [
+            `**Member ID:** \`${member.member_id}\``,
+            `**Discord:** @${discordUsername} (ID: \`${discordId}\`)`,
+            `**Roblox:** @${robloxUsername} (ID: \`${robloxId}\`)`,
+            `**Flags on Record:** ${flagCount}`,
+          ],
+        });
+      }
+    } catch (err) {
+      console.error('[Verify] Flag check error:', err.message);
+    }
+
+    await sendVerifyLog({ emoji: '⛔', title: 'Verification Blocked (Blacklisted)', lines: [`**Type:** Discord ID`, `**Account ID:** \`${discordId}\``] });
       return res.send('<h2>❌ Something went wrong during verification. Please try again.</h2>');
     }
 
@@ -234,7 +254,26 @@ app.get('/roblox-callback', async (req, res) => {
 
     // Check Roblox blacklist
     if (await isBlacklisted('roblox', robloxId)) {
-      await sendVerifyLog({ emoji: '⛔', title: 'Verification Blocked (Blacklisted)', lines: [`**Type:** Roblox ID`, `**Account ID:** \`${robloxId}\``] });
+      // Alert if re-verifying member has flags
+    try {
+      const flagCount = await getFlagCount(member.member_id);
+      if (!isNew && flagCount > 0) {
+        await sendVerifyLog({
+          emoji: '⚠️',
+          title: 'Flagged Member Re-Verified',
+          lines: [
+            `**Member ID:** \`${member.member_id}\``,
+            `**Discord:** @${discordUsername} (ID: \`${discordId}\`)`,
+            `**Roblox:** @${robloxUsername} (ID: \`${robloxId}\`)`,
+            `**Flags on Record:** ${flagCount}`,
+          ],
+        });
+      }
+    } catch (err) {
+      console.error('[Verify] Flag check error:', err.message);
+    }
+
+    await sendVerifyLog({ emoji: '⛔', title: 'Verification Blocked (Blacklisted)', lines: [`**Type:** Roblox ID`, `**Account ID:** \`${robloxId}\``] });
       return res.send('<h2>❌ Something went wrong during verification. Please try again.</h2>');
     }
 
@@ -336,6 +375,25 @@ app.get('/roblox-callback', async (req, res) => {
     `);
 
     console.log(`[Verify] ${isNew ? 'New' : 'Returning'} member: ${discordUsername} + @${robloxUsername} → ${member.member_id}`);
+
+    // Alert if re-verifying member has flags
+    try {
+      const flagCount = await getFlagCount(member.member_id);
+      if (!isNew && flagCount > 0) {
+        await sendVerifyLog({
+          emoji: '⚠️',
+          title: 'Flagged Member Re-Verified',
+          lines: [
+            `**Member ID:** \`${member.member_id}\``,
+            `**Discord:** @${discordUsername} (ID: \`${discordId}\`)`,
+            `**Roblox:** @${robloxUsername} (ID: \`${robloxId}\`)`,
+            `**Flags on Record:** ${flagCount}`,
+          ],
+        });
+      }
+    } catch (err) {
+      console.error('[Verify] Flag check error:', err.message);
+    }
 
     await sendVerifyLog({
       emoji: '✅',

@@ -174,6 +174,7 @@ async function handleWhois(interaction) {
   }
 
   const verifiedDate = `<t:${Math.floor(new Date(record.joined_at).getTime() / 1000)}:D>`;
+  const flagCount = await getFlagCount(record.member_id);
   const verifiedStatus = !record.verified ? 'Unverified' : record.roblox_id ? 'Verified' : 'Partially Verified (Discord only)';
 
   const lines = [
@@ -186,6 +187,7 @@ async function handleWhois(interaction) {
     `• Joined Discord: ${joinedDiscord}`,
     `• Joined Server: ${joinedServer}`,
     `• Verification Status: ${verifiedStatus}`,
+    flagCount > 0 ? `• ⚠️ Moderation Flags: ${flagCount}` : null,
     `• Verified Date: ${verifiedDate}`,
     `• Assigned Member ID: ${record.member_id}`,
   ].filter(Boolean).join('\n');
