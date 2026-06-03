@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const axios   = require('axios');
 const { addMember } = require('./src/utils/memberStore');
+const { isBlacklisted } = require('./src/utils/blacklistStore');
 
 const app = express();
 
@@ -140,6 +141,11 @@ app.get('/callback', async (req, res) => {
 
     const { id: discordId, username: discordUsername } = userRes.data;
 
+    // Check Discord blacklist
+    if (await isBlacklisted('discord', discordId)) {
+      return res.send('<h2>❌ Something went wrong during verification. Please try again.</h2>');
+    }
+
     // Store Discord info in state and redirect to Roblox OAuth2
     const robloxState = Buffer.from(JSON.stringify({
       discordId,
@@ -206,6 +212,11 @@ app.get('/roblox-callback', async (req, res) => {
 
     const robloxId       = robloxUserRes.data.sub;
     const robloxUsername = robloxUserRes.data.preferred_username ?? robloxUserRes.data.name;
+
+    // Check Roblox blacklist
+    if (await isBlacklisted('roblox', robloxId)) {
+      return res.send('<h2>❌ Something went wrong during verification. Please try again.</h2>');
+    }
 
     // Save both accounts to DB
     const { member, isNew } = await addMember(discordId, discordUsername, robloxId, robloxUsername);
