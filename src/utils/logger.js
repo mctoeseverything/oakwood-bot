@@ -10,7 +10,7 @@ function setClient(client) {
 }
 
 async function sendLog(fields) {
-  const logChannelId = process.env.LOG_CHANNEL_ID;
+  const logChannelId = process.env.VERIFY_LOG_CHANNEL_ID;
   if (!logChannelId || !_client) return;
 
   try {

@@ -21,7 +21,7 @@ const PORT = process.env.VERIFY_PORT || 3001;
 
 // ── Log helper (uses Discord API directly since no bot client here) ──────────
 async function sendVerifyLog({ emoji, title, lines }) {
-  const logChannelId = process.env.LOG_CHANNEL_ID;
+  const logChannelId = process.env.VERIFY_LOG_CHANNEL_ID;
   if (!logChannelId || !BOT_TOKEN) return;
   try {
     const now  = Math.floor(Date.now() / 1000);
