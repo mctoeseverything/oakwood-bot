@@ -3,7 +3,7 @@ const {
   PermissionFlagsBits,
 } = require('discord.js');
 const { getMemberByDiscordId, removeMember } = require('../../utils/memberStore');
-const { MANAGED_ROLE_IDS } = require('../../utils/rolesConfig');
+const { MANAGED_ROLE_IDS, ADMIN_ROLE_IDS } = require('../../utils/rolesConfig');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -20,6 +20,12 @@ module.exports = {
 
   async execute(interaction, client) {
     await interaction.deferReply({ flags: (1 << 6) });
+
+    // Check admin role
+    const hasAdminRole = interaction.member.roles.cache.some(r => ADMIN_ROLE_IDS.includes(r.id));
+    if (!hasAdminRole) {
+      return interaction.editReply({ content: '⛔ You do not have permission to use this command.' });
+    }
 
     const target = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason') ?? 'No reason provided';

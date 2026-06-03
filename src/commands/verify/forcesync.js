@@ -4,6 +4,7 @@ const {
   ContainerBuilder,
   SeparatorSpacingSize,
 } = require('discord.js');
+const { ADMIN_ROLE_IDS } = require('../../utils/rolesConfig');
 const { getMemberByDiscordId } = require('../../utils/memberStore');
 const { syncRoles } = require('../../utils/syncRolesUtil');
 
@@ -19,6 +20,12 @@ module.exports = {
 
   async execute(interaction, client) {
     await interaction.deferReply({ flags: (1 << 6) });
+
+    // Check admin role
+    const hasAdminRole = interaction.member.roles.cache.some(r => ADMIN_ROLE_IDS.includes(r.id));
+    if (!hasAdminRole) {
+      return interaction.editReply({ content: '⛔ You do not have permission to use this command.' });
+    }
 
     const target = interaction.options.getUser('user');
     const record = await getMemberByDiscordId(target.id);
