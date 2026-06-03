@@ -22,7 +22,7 @@ module.exports = {
     await interaction.deferReply({ flags: (1 << 6) });
 
     // Check admin role
-    const hasAdminRole = interaction.member.roles.cache.some(r => ADMIN_ROLE_IDS.includes(r.id));
+    const hasAdminRole = Array.isArray(ADMIN_ROLE_IDS) && ADMIN_ROLE_IDS.length > 0 && interaction.member.roles.cache.some(r => ADMIN_ROLE_IDS.includes(r.id));
     if (!hasAdminRole) {
       return interaction.editReply({ content: '⛔ You do not have permission to use this command.' });
     }
