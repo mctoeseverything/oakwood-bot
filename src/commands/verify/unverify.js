@@ -6,8 +6,8 @@ const {
   ButtonBuilder,
   ButtonStyle,
 } = require('discord.js');
-const { getMemberByDiscordId } = require('../../utils/memberStore');
-const { removeMember } = require('../../utils/memberStore');
+const { getMemberByDiscordId, removeMember } = require('../../utils/memberStore');
+const { MANAGED_ROLE_IDS } = require('../../utils/rolesConfig');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,7 +15,7 @@ module.exports = {
     .setDescription('Revoke your verification status'),
 
   async execute(interaction, client) {
-    const record = getMemberByDiscordId(interaction.user.id);
+    const record = await getMemberByDiscordId(interaction.user.id);
 
     if (!record) {
       return interaction.reply({
@@ -68,7 +68,7 @@ module.exports = {
     }
 
     if (action === 'confirm') {
-      const record = getMemberByDiscordId(interaction.user.id);
+      const record = await getMemberByDiscordId(interaction.user.id);
       if (!record) {
         return interaction.update({
           components: [],
@@ -78,17 +78,21 @@ module.exports = {
       }
 
       // Remove from DB
-      removeMember(interaction.user.id);
+      await removeMember(interaction.user.id);
 
-      // Remove verified role
-      const verifiedRoleId = process.env.VERIFIED_ROLE_ID;
-      if (verifiedRoleId) {
-        try {
-          const member = await interaction.guild.members.fetch(interaction.user.id);
-          await member.roles.remove(verifiedRoleId);
-        } catch (err) {
-          console.error('[Unverify] Failed to remove role:', err.message);
+      // Remove verified role + any group rank roles
+      try {
+        const member = await interaction.guild.members.fetch(interaction.user.id);
+        const rolesToRemove = [];
+
+        if (process.env.VERIFIED_ROLE_ID) rolesToRemove.push(process.env.VERIFIED_ROLE_ID);
+        for (const roleId of MANAGED_ROLE_IDS) {
+          if (member.roles.cache.has(roleId)) rolesToRemove.push(roleId);
         }
+
+        if (rolesToRemove.length > 0) await member.roles.remove(rolesToRemove);
+      } catch (err) {
+        console.error('[Unverify] Failed to remove roles:', err.message);
       }
 
       const container = new ContainerBuilder()
