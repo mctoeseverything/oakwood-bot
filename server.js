@@ -18,6 +18,9 @@ const {
 
 const PORT = process.env.VERIFY_PORT || 3001;
 
+// ── Health check (for keep-alive ping) ──────────────────────────────────────
+app.get('/health', (req, res) => res.send('OK'));
+
 // ── Privacy Policy ───────────────────────────────────────────────────────────
 app.get('/privacy', (req, res) => {
   res.send(`
@@ -205,7 +208,7 @@ app.get('/roblox-callback', async (req, res) => {
     const robloxUsername = robloxUserRes.data.preferred_username ?? robloxUserRes.data.name;
 
     // Save both accounts to DB
-    const { member, isNew } = addMember(discordId, discordUsername, robloxId, robloxUsername);
+    const { member, isNew } = await addMember(discordId, discordUsername, robloxId, robloxUsername);
 
     // Assign verified role
     if (VERIFIED_ROLE_ID && GUILD_ID) {
@@ -319,7 +322,7 @@ app.listen(PORT, () => {
   if (selfUrl) {
     setInterval(async () => {
       try {
-        await axios.get(selfUrl);
+        await axios.get(`${selfUrl}/health`);
         console.log('[Keep-Alive] Pinged verify service');
       } catch (err) {
         console.error('[Keep-Alive] Ping failed:', err.message);
