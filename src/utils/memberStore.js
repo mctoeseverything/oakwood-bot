@@ -17,6 +17,7 @@ const memberSchema = new mongoose.Schema({
   roblox_id:    { type: String, default: null },
   roblox_name:  { type: String, default: null },
   joined_at:    { type: String, required: true },
+  verified:     { type: Boolean, default: true },
 });
 
 const Member = mongoose.models.Member || mongoose.model('Member', memberSchema);
@@ -38,11 +39,14 @@ async function addMember(discordId, discordName, robloxId = null, robloxName = n
   const existing = await Member.findOne({ discord_id: discordId });
 
   if (existing) {
+    // Always update and restore verified status on re-verify
+    existing.discord_name = discordName;
+    existing.verified     = true;
     if (robloxId) {
       existing.roblox_id   = robloxId;
       existing.roblox_name = robloxName;
-      await existing.save();
     }
+    await existing.save();
     return { member: existing.toObject(), isNew: false };
   }
 
@@ -54,6 +58,7 @@ async function addMember(discordId, discordName, robloxId = null, robloxName = n
     roblox_id:    robloxId,
     roblox_name:  robloxName,
     joined_at:    new Date().toISOString(),
+    verified:     true,
   });
 
   return { member: member.toObject(), isNew: true };
@@ -79,7 +84,11 @@ async function getMemberByRobloxId(robloxId) {
 
 async function removeMember(discordId) {
   await connect();
-  await Member.deleteOne({ discord_id: discordId });
+  // Don't delete — just clear verification data so the member ID is preserved forever
+  await Member.updateOne(
+    { discord_id: discordId },
+    { $set: { roblox_id: null, roblox_name: null, verified: false } }
+  );
 }
 
 module.exports = {

@@ -69,7 +69,7 @@ module.exports = {
 
     if (action === 'confirm') {
       const record = await getMemberByDiscordId(interaction.user.id);
-      if (!record) {
+      if (!record || !record.verified) {
         return interaction.update({
           components: [],
           content: '⚠️ You are not currently verified.',

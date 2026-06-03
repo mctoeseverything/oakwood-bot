@@ -174,7 +174,7 @@ async function handleWhois(interaction) {
   }
 
   const verifiedDate = `<t:${Math.floor(new Date(record.joined_at).getTime() / 1000)}:D>`;
-  const verifiedStatus = record.roblox_id ? 'Verified' : 'Partially Verified (Discord only)';
+  const verifiedStatus = !record.verified ? 'Unverified' : record.roblox_id ? 'Verified' : 'Partially Verified (Discord only)';
 
   const lines = [
     record.roblox_name
