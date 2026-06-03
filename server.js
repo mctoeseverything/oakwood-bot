@@ -210,14 +210,34 @@ app.get('/roblox-callback', async (req, res) => {
     // Save both accounts to DB
     const { member, isNew } = await addMember(discordId, discordUsername, robloxId, robloxUsername);
 
-    // Assign verified role
-    if (VERIFIED_ROLE_ID && GUILD_ID) {
+    // Assign verified role, remove unverified role, set nickname to Roblox username
+    if (GUILD_ID) {
       try {
-        await axios.put(
-          `https://discord.com/api/guilds/${GUILD_ID}/members/${discordId}/roles/${VERIFIED_ROLE_ID}`,
-          {},
-          { headers: { Authorization: `Bot ${BOT_TOKEN}` } }
-        );
+        // Add verified role
+        if (VERIFIED_ROLE_ID) {
+          await axios.put(
+            `https://discord.com/api/guilds/${GUILD_ID}/members/${discordId}/roles/${VERIFIED_ROLE_ID}`,
+            {},
+            { headers: { Authorization: `Bot ${BOT_TOKEN}` } }
+          );
+        }
+
+        // Remove unverified role
+        const unverifiedRoleId = process.env.UNVERIFIED_ROLE_ID;
+        if (unverifiedRoleId) {
+          await axios.delete(
+            `https://discord.com/api/guilds/${GUILD_ID}/members/${discordId}/roles/${unverifiedRoleId}`,
+            { headers: { Authorization: `Bot ${BOT_TOKEN}` } }
+          ).catch(() => {});
+        }
+
+        // Set nickname to Roblox username
+        await axios.patch(
+          `https://discord.com/api/guilds/${GUILD_ID}/members/${discordId}`,
+          { nick: robloxUsername },
+          { headers: { Authorization: `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' } }
+        ).catch(() => {});
+
       } catch (roleErr) {
         console.error('[Verify] Failed to assign role:', roleErr.response?.data ?? roleErr.message);
       }

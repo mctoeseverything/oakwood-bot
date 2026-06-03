@@ -80,7 +80,7 @@ module.exports = {
       // Remove from DB
       await removeMember(interaction.user.id);
 
-      // Remove verified role + any group rank roles
+      // Remove verified role + rank roles, add unverified role, reset nickname
       try {
         const member = await interaction.guild.members.fetch(interaction.user.id);
         const rolesToRemove = [];
@@ -91,8 +91,12 @@ module.exports = {
         }
 
         if (rolesToRemove.length > 0) await member.roles.remove(rolesToRemove);
+        if (process.env.UNVERIFIED_ROLE_ID) await member.roles.add(process.env.UNVERIFIED_ROLE_ID);
+
+        // Reset nickname
+        await member.setNickname(null).catch(() => {});
       } catch (err) {
-        console.error('[Unverify] Failed to remove roles:', err.message);
+        console.error('[Unverify] Failed to update roles/nickname:', err.message);
       }
 
       const container = new ContainerBuilder()

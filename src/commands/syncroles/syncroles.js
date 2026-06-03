@@ -68,6 +68,9 @@ module.exports = {
           ),
         );
 
+      // Set nickname to Roblox username
+      await member.setNickname(record.roblox_name).catch(() => {});
+
       return interaction.editReply({
         components: [container],
         flags: (1 << 15),
