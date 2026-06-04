@@ -1,12 +1,4 @@
-const {
-  Events,
-  AuditLogEvent,
-  ContainerBuilder,
-  SeparatorSpacingSize,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-} = require('discord.js');
+const { Events, AuditLogEvent } = require('discord.js');
 const { getMemberByDiscordId } = require('../utils/memberStore');
 const { addFlag, getFlagCount } = require('../utils/flagStore');
 
@@ -19,90 +11,12 @@ module.exports = {
     const moderator = auditEntry.executor;
     const reason    = auditEntry.reason ?? 'No reason provided';
 
-    // ── Parse Sapphire reason format: [caseId] date @mod (duration): reason
-    let caseId      = null;
-    let duration    = null;
+    // Parse Sapphire reason format: [caseId] date @mod (duration): reason
     let cleanReason = reason;
-
     const sapphireMatch = reason.match(/^\[([^\]]+)\]\s[\d\/]+ - [\d:]+ @\S+ \(([^)]+)\):\s(.+)$/);
-    if (sapphireMatch) {
-      caseId      = sapphireMatch[1];
-      duration    = sapphireMatch[2];
-      cleanReason = sapphireMatch[3];
-    }
+    if (sapphireMatch) cleanReason = sapphireMatch[3];
 
-    // Build expires timestamp
-    let expiresLine = '> Expires: Permanent';
-    if (duration && duration.toLowerCase() !== 'permanent') {
-      const match = duration.match(/(\d+)\s*(second|minute|hour|day|week|month|year)s?/i);
-      if (match) {
-        const amount = parseInt(match[1]);
-        const unit   = match[2].toLowerCase();
-        const ms = {
-          second: 1000, minute: 60000, hour: 3600000,
-          day: 86400000, week: 604800000, month: 2592000000, year: 31536000000,
-        }[unit] ?? 0;
-        if (ms > 0) {
-          const unixSec = Math.floor((Date.now() + amount * ms) / 1000);
-          expiresLine = `> Expires: <t:${unixSec}:F> (in ${duration})`;
-        }
-      } else {
-        expiresLine = `> Expires: ${duration}`;
-      }
-    }
-
-    // ── Build the DM ──────────────────────────────────────────────────────
-    const caseBlock = [
-      caseId ? `> Case ID: \`${caseId}\`` : null,
-      `> Reason: ${cleanReason}`,
-      expiresLine,
-      moderator ? `> Moderator: ${moderator.username}` : null,
-    ].filter(Boolean).join('\n');
-
-    const container = new ContainerBuilder()
-      .addTextDisplayComponents(t =>
-        t.setContent(
-          `### Amber Corporation Notice\nYou have been banned from the Amber Corporation Discord server. Some case details have been listed below.\n\n${caseBlock}\n\nYou were banned due to a severe and/or repeated offense of our regulations.`,
-        ),
-      )
-      .addSeparatorComponents(s =>
-        s.setDivider(true).setSpacing(SeparatorSpacingSize.Large),
-      )
-      .addTextDisplayComponents(t =>
-        t.setContent(
-          `### Appeals Process\nIf you feel this ban is false or would like to appeal, you are entitled to the opportunity. Our moderators reserve the full right to deny your appeal for any reason they see fit. Troll responses will be voided, and may result in an appeal blacklist.`,
-        ),
-      )
-      .addSeparatorComponents(s =>
-        s.setDivider(false).setSpacing(SeparatorSpacingSize.Small),
-      )
-      .addSeparatorComponents(s =>
-        s.setDivider(false).setSpacing(SeparatorSpacingSize.Large),
-      )
-      .addActionRowComponents(() =>
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setLabel('Send an Appeal')
-            .setEmoji('🔗')
-            .setStyle(ButtonStyle.Link)
-            .setURL('https://appeal.gg/7NgHSzXMDq'),
-          new ButtonBuilder()
-            .setCustomId('ban:official_notice')
-            .setLabel('This is an official Amber Corporation notice.')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(true),
-        ),
-      );
-
-    // ── DM before ban takes effect ────────────────────────────────────────
-    try {
-      await user.send({ components: [container], flags: (1 << 15) });
-      console.log(`[BanAdd] Sent ban DM to ${user.username}`);
-    } catch {
-      console.log(`[BanAdd] Could not DM ${user.username} (DMs likely disabled)`);
-    }
-
-    // ── Flag the member in our system ─────────────────────────────────────
+    // Flag the member in our system
     try {
       const record = await getMemberByDiscordId(user.id);
       if (record) {
