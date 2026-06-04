@@ -1,28 +1,23 @@
-const { Events, ContainerBuilder, SeparatorSpacingSize, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const {
+  Events,
+  AuditLogEvent,
+  ContainerBuilder,
+  SeparatorSpacingSize,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} = require('discord.js');
 const { getMemberByDiscordId } = require('../utils/memberStore');
 const { addFlag, getFlagCount } = require('../utils/flagStore');
 
 module.exports = {
-  name: Events.GuildBanAdd,
-  async execute(ban, client) {
-    const { user, guild } = ban;
+  name: Events.GuildAuditLogEntryCreate,
+  async execute(auditEntry, guild) {
+    if (auditEntry.action !== AuditLogEvent.MemberBanAdd) return;
 
-    // Wait for audit log to populate
-    await new Promise(r => setTimeout(r, 2000));
-
-    let reason    = 'No reason provided';
-    let moderator = null;
-
-    try {
-      const auditLogs = await guild.fetchAuditLogs({ type: 22, limit: 5 });
-      const entry = auditLogs.entries.find(e => e.target.id === user.id);
-      if (entry) {
-        reason    = entry.reason ?? 'No reason provided';
-        moderator = entry.executor;
-      }
-    } catch (err) {
-      console.error('[BanAdd] Failed to fetch audit log:', err.message);
-    }
+    const user      = auditEntry.target;
+    const moderator = auditEntry.executor;
+    const reason    = auditEntry.reason ?? 'No reason provided';
 
     // ── Parse Sapphire reason format: [caseId] date @mod (duration): reason
     let caseId      = null;
@@ -39,7 +34,6 @@ module.exports = {
     // Build expires timestamp
     let expiresLine = '> Expires: Permanent';
     if (duration && duration.toLowerCase() !== 'permanent') {
-      // Parse duration like "3 days", "1 hour", "7 days" into a future timestamp
       const match = duration.match(/(\d+)\s*(second|minute|hour|day|week|month|year)s?/i);
       if (match) {
         const amount = parseInt(match[1]);
@@ -57,7 +51,7 @@ module.exports = {
       }
     }
 
-    // ── Build the DM components ───────────────────────────────────────────
+    // ── Build the DM ──────────────────────────────────────────────────────
     const caseBlock = [
       caseId ? `> Case ID: \`${caseId}\`` : null,
       `> Reason: ${cleanReason}`,
@@ -100,7 +94,7 @@ module.exports = {
         ),
       );
 
-    // ── DM the user ───────────────────────────────────────────────────────
+    // ── DM before ban takes effect ────────────────────────────────────────
     try {
       await user.send({ components: [container], flags: (1 << 15) });
       console.log(`[BanAdd] Sent ban DM to ${user.username}`);
