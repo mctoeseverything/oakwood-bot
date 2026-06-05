@@ -15,6 +15,15 @@ const ADMIN_ROLE_IDS = [
 ];
 
 /**
+ * Discord role IDs that can use /rank promote, /rank demote, /rank change.
+ * Any user with at least one of these roles can manage Roblox group ranks.
+ * Rank changes are still limited to ranks strictly below the executor's own rank.
+ */
+const RANK_MANAGER_ROLE_IDS = [
+  // '000000000000000000', // ← Replace with your rank manager role ID(s)
+];
+
+/**
  * Your Roblox group ID.
  * Found in your group's URL: roblox.com/groups/XXXXXXX/...
  */
@@ -39,4 +48,4 @@ const RANK_TO_ROLE = {
  */
 const MANAGED_ROLE_IDS = Object.values(RANK_TO_ROLE);
 
-module.exports = { ROBLOX_GROUP_ID, RANK_TO_ROLE, MANAGED_ROLE_IDS, ADMIN_ROLE_IDS };
+module.exports = { ROBLOX_GROUP_ID, RANK_TO_ROLE, MANAGED_ROLE_IDS, ADMIN_ROLE_IDS, RANK_MANAGER_ROLE_IDS };
