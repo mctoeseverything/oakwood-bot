@@ -26,13 +26,26 @@ function ocHeaders() {
  * Returns [{ rank, name, id, path, ... }]
  */
 async function fetchGroupRoles() {
-  const res = await axios.get(
-    `${OC_BASE}/groups/${ROBLOX_GROUP_ID}/roles`,
-    { headers: ocHeaders() },
-  );
-  const roles = res.data.groupRoles ?? [];
-  return roles
-    .filter(r => r.rank !== 0) // exclude Guest (rank 0)
+  let allRoles = [];
+  let nextPageToken = null;
+
+  do {
+    const params = { maxPageSize: 20 };
+    if (nextPageToken) params.pageToken = nextPageToken;
+
+    const res = await axios.get(
+      `${OC_BASE}/groups/${ROBLOX_GROUP_ID}/roles`,
+      { headers: ocHeaders(), params },
+    );
+
+    const roles = res.data.groupRoles ?? [];
+    allRoles = allRoles.concat(roles);
+    nextPageToken = res.data.nextPageToken ?? null;
+  } while (nextPageToken);
+
+  return allRoles
+    .filter(r => r.rank !== 0)
+    .map(r => ({ ...r, name: r.displayName ?? r.name ?? String(r.rank) }))
     .sort((a, b) => a.rank - b.rank);
 }
 
