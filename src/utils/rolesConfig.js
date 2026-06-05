@@ -20,7 +20,7 @@ const ADMIN_ROLE_IDS = [
  * Rank changes are still limited to ranks strictly below the executor's own rank.
  */
 const RANK_MANAGER_ROLE_IDS = [
-  // '000000000000000000', // ← Replace with your rank manager role ID(s)
+   '1434220849526734968', // ← Replace with your rank manager role ID(s)
 ];
 
 /**
@@ -37,8 +37,29 @@ const ROBLOX_GROUP_ID = '12183130';
  *   robloxRank: 'discordRoleId',
  */
 const RANK_TO_ROLE = {
-  255: '1511479068971892758', // Owner    → @Owner
-  254: '1511479347725209631', // Co-Owner → @Co-Owner
+  254: '1511479068971892758', // Chairman
+  23: '1511479347725209631', // Vice Chairman
+  22: '1512547883340009475', // Development Contributor
+  21: '1512547929414570196', // Company President
+  20: '1512548523881660558', // Company Vice President
+  19: '1512548659290701825', // Chief Executive Officer
+  18: '1512548774097191075', // Corporate Operations Executive
+  17: '1512548924748075099', // Board of Executives
+  16: '1512549034827452426', // Corporate Executive
+  15: '1512549127852920873', // Senior Corporate
+  14: '1512549222816284692', // Corporate Associate
+  13: '1512549374826254467', // Store Manager
+  12: '1512549444149711008', // Assistant Store Manager
+  11: '1512549563381317975', // Department Supervisor
+  10: '1512549653420310659', // Management Assistant
+  9: '1512549758454075402', // Senior Team Associate
+  8: '1512549791484088390', // Team Associate
+  7: '1512549966923567185', // Junior Team Associate
+  6: '1512550082694877286', // Trainee
+  5: '1512550171601539172', // Affiliate Representative
+  4: '1512550268372254850', // Noted Customer
+  3: '1512551859221434480', // Customer
+
 };
 
 /**

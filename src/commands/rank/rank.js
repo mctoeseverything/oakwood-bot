@@ -230,7 +230,7 @@ module.exports = {
     // Permission re-check
     if (!hasRankManagerRole(interaction.member)) {
       const container = new ContainerBuilder()
-        .addTextDisplayComponents(t => t.setContent('### ⚠️ Action Blocked\n⛔ You do not have permission to use rank management commands.'));
+        .addTextDisplayComponents(t => t.setContent('### ⚠️ Insufficent Permissions\nYou do not have permission to run this command. Contact a higher rank for help.'));
       return interaction.editReply({ components: [container], flags: (1 << 15) });
     }
 
