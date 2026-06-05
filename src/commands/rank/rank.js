@@ -94,8 +94,8 @@ async function getExecutorRank(interaction) {
   // membership.role looks like "groups/xxx/roles/yyy" — we need the rank number
   // We fetch group roles and match by path
   const roles = await fetchGroupRoles();
-  const rolePath = membership.role; // e.g. "groups/12183130/roles/12345678"
-  const matched = roles.find(r => r.path === rolePath || String(r.id) === rolePath.split('/').pop());
+  const roleId = membership.role.split('/').pop();
+  const matched = roles.find(r => String(r.id) === roleId);
   return matched?.rank ?? 0;
 }
 
@@ -230,7 +230,7 @@ module.exports = {
     // Permission re-check
     if (!hasRankManagerRole(interaction.member)) {
       const container = new ContainerBuilder()
-        .addTextDisplayComponents(t => t.setContent('### ⚠️ Insufficent Permissions\nYou do not have permission to run this command. Contact a higher rank for help.'));
+        .addTextDisplayComponents(t => t.setContent('### ⚠️ Action Blocked\n⛔ You do not have permission to use rank management commands.'));
       return interaction.editReply({ components: [container], flags: (1 << 15) });
     }
 
@@ -293,7 +293,8 @@ module.exports = {
     }
 
     const currentRolePath = targetMembership.role;
-    const oldRole = roles.find(r => r.path === currentRolePath || String(r.id) === currentRolePath.split('/').pop());
+    const currentRoleId = currentRolePath.split('/').pop();
+    const oldRole = roles.find(r => String(r.id) === currentRoleId);
 
     // Cannot change rank of someone with rank >= executor's rank
     if (oldRole && oldRole.rank >= executorRank) {
@@ -376,7 +377,8 @@ async function _handleShift({ interaction, client, targetUser, direction }) {
   }
 
   const currentRolePath = targetMembership.role;
-  const currentRoleIndex = roles.findIndex(r => r.path === currentRolePath || String(r.id) === currentRolePath.split('/').pop());
+  const currentRoleId = currentRolePath.split('/').pop();
+  const currentRoleIndex = roles.findIndex(r => String(r.id) === currentRoleId);
   const oldRole = currentRoleIndex !== -1 ? roles[currentRoleIndex] : null;
 
   // Cannot affect someone at or above executor's rank
