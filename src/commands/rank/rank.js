@@ -30,7 +30,7 @@ async function fetchGroupRoles() {
     `${OC_BASE}/groups/${ROBLOX_GROUP_ID}/roles`,
     { headers: ocHeaders() },
   );
-  const roles = res.data.roles ?? [];
+  const roles = res.data.groupRoles ?? [];
   return roles
     .filter(r => r.rank !== 0) // exclude Guest (rank 0)
     .sort((a, b) => a.rank - b.rank);
