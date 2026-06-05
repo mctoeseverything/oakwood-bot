@@ -323,6 +323,11 @@ async function _handleShift({ interaction, client, targetUser, direction }) {
 
   const { index: currentIndex, role: oldRole } = resolveCurrentRole(roles, targetMembership);
 
+  const { index: currentIndex, role: oldRole } = resolveCurrentRole(roles, targetMembership);
+console.log('[Rank Debug] membership.role:', targetMembership.role);
+console.log('[Rank Debug] extracted roleId:', targetMembership.role.split('/').pop());
+console.log('[Rank Debug] roles list:', roles.map(r => ({ id: r.id, rank: r.rank, name: r.name })));
+
   if (oldRole && oldRole.rank >= executorRank) {
     return errorReply(
       interaction,
