@@ -321,10 +321,7 @@ async function _handleShift({ interaction, client, targetUser, direction }) {
     return errorReply(interaction, `**@${targetRecord.roblox_name}** is not in the Roblox group.`);
   }
 
-  const { index: currentIndex, role: oldRole } = resolveCurrentRole(roles, targetMembership);
-
-  const { index: currentIndex, role: oldRole } = resolveCurrentRole(roles, targetMembership);
-  
+  const { index: currentIndex, role: oldRole } = resolveCurrentRole(roles, targetMembership);  
 console.log('[Rank Debug] membership.role:', targetMembership.role);
 console.log('[Rank Debug] extracted roleId:', targetMembership.role.split('/').pop());
 console.log('[Rank Debug] roles list:', roles.map(r => ({ id: r.id, rank: r.rank, name: r.name })));
