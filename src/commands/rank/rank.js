@@ -6,8 +6,6 @@ const {
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
 } = require('discord.js');
 
 const axios = require('axios');
@@ -25,14 +23,13 @@ function ocHeaders() {
 
 /**
  * Fetch all group roles sorted ascending by rank number.
- * Returns [{ rank, name, id, memberCount }]
+ * Returns [{ rank, name, id, path, ... }]
  */
 async function fetchGroupRoles() {
   const res = await axios.get(
     `${OC_BASE}/groups/${ROBLOX_GROUP_ID}/roles`,
     { headers: ocHeaders() },
   );
-  // Open Cloud returns { roles: [...] }
   const roles = res.data.roles ?? [];
   return roles
     .filter(r => r.rank !== 0) // exclude Guest (rank 0)
@@ -45,7 +42,6 @@ async function fetchGroupRoles() {
  */
 async function fetchMembership(robloxUserId) {
   try {
-    // List memberships and filter — Open Cloud v2 uses GET /groups/{id}/memberships?filter=...
     const res = await axios.get(
       `${OC_BASE}/groups/${ROBLOX_GROUP_ID}/memberships`,
       {
@@ -63,16 +59,12 @@ async function fetchMembership(robloxUserId) {
 
 /**
  * Update a user's rank in the group.
- * @param {string} membershipPath  e.g. "groups/12183130/memberships/..."
- * @param {string} rolePath        e.g. "groups/12183130/roles/..."
  */
 async function updateMembership(membershipPath, rolePath) {
   await axios.patch(
     `${OC_BASE}/${membershipPath}`,
     { role: rolePath },
-    {
-      headers: { ...ocHeaders(), 'Content-Type': 'application/json' },
-    },
+    { headers: { ...ocHeaders(), 'Content-Type': 'application/json' } },
   );
 }
 
@@ -84,36 +76,33 @@ function hasRankManagerRole(member) {
 }
 
 /**
- * Returns the executor's current rank number (0 if not in group / not verified).
+ * Returns the executor's current Roblox group rank number.
+ * Returns 0 if not verified or not in the group.
  */
 async function getExecutorRank(interaction) {
   const record = await getMemberByDiscordId(interaction.user.id);
   if (!record?.roblox_id) return 0;
   const membership = await fetchMembership(record.roblox_id);
   if (!membership) return 0;
-  // membership.role looks like "groups/xxx/roles/yyy" — we need the rank number
-  // We fetch group roles and match by path
   const roles = await fetchGroupRoles();
   const roleId = membership.role.split('/').pop();
   const matched = roles.find(r => String(r.id) === roleId);
   return matched?.rank ?? 0;
 }
 
+/**
+ * Given a membership's role path, find the matching role object and its index
+ * in the sorted roles array.
+ */
+function resolveCurrentRole(roles, membership) {
+  const roleId = membership.role.split('/').pop();
+  const index = roles.findIndex(r => String(r.id) === roleId);
+  return { index, role: index !== -1 ? roles[index] : null };
+}
+
 // ─── Shared rank-change logic ────────────────────────────────────────────────
 
-/**
- * Core function: performs a rank change after all permission checks pass.
- * @param {object} opts
- * @param {import('discord.js').CommandInteraction} opts.interaction
- * @param {object} opts.targetRecord     memberStore record for the target user
- * @param {object} opts.targetUser       Discord User object
- * @param {object} opts.newRole          role object from fetchGroupRoles()
- * @param {object} opts.oldRole          role object from fetchGroupRoles() or null
- * @param {object} opts.membership       Open Cloud membership resource
- * @param {string} opts.actionLabel      e.g. "Promoted", "Demoted", "Rank Changed"
- * @param {import('discord.js').Client} opts.client
- */
-async function applyRankChange({ interaction, targetRecord, targetUser, newRole, oldRole, membership, actionLabel, client }) {
+async function applyRankChange({ interaction, targetRecord, targetUser, newRole, oldRole, membership, actionLabel }) {
   await updateMembership(membership.path, newRole.path);
 
   const oldRankLine = oldRole ? `**${oldRole.rank}** — ${oldRole.name}` : 'Unknown';
@@ -151,18 +140,13 @@ async function applyRankChange({ interaction, targetRecord, targetUser, newRole,
   });
 }
 
-// ─── Error reply helper ───────────────────────────────────────────────────────
+// ─── Error reply helper ──────────────────────────────────────────────────────
 
 async function errorReply(interaction, message) {
   const container = new ContainerBuilder()
     .addTextDisplayComponents(t => t.setContent(`### ⚠️ Action Blocked\n${message}`));
   return interaction.editReply({ components: [container], flags: (1 << 15) });
 }
-
-// ─── /changerank pending store (for button confirmation) ────────────────────
-
-// Map<interactionId, { targetUserId, newRoleRank, expiresAt }>
-const pendingRankChanges = new Map();
 
 // ─── Command definition ──────────────────────────────────────────────────────
 
@@ -172,7 +156,6 @@ module.exports = {
     .setDescription('Manage Roblox group ranks for verified members')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
 
-    // ── /rank promote ──────────────────────────────────────────
     .addSubcommand(sub =>
       sub
         .setName('promote')
@@ -182,7 +165,6 @@ module.exports = {
             .setDescription('The Discord user to promote')
             .setRequired(true)))
 
-    // ── /rank demote ───────────────────────────────────────────
     .addSubcommand(sub =>
       sub
         .setName('demote')
@@ -192,7 +174,6 @@ module.exports = {
             .setDescription('The Discord user to demote')
             .setRequired(true)))
 
-    // ── /rank change ───────────────────────────────────────────
     .addSubcommand(sub =>
       sub
         .setName('change')
@@ -202,11 +183,9 @@ module.exports = {
             .setDescription('The Discord user to rank')
             .setRequired(true))),
 
-  // ─────────────────────────────────────────────────────────────
   async execute(interaction, client) {
     await interaction.deferReply({ flags: (1 << 6) });
 
-    // ── Permission check ─────────────────────────────────────
     if (!hasRankManagerRole(interaction.member)) {
       return errorReply(interaction, '⛔ You do not have permission to use rank management commands.');
     }
@@ -217,26 +196,22 @@ module.exports = {
     if (sub === 'change')  return handleChange(interaction, client);
   },
 
-  // ─────────────────────────────────────────────────────────────
   async handleSelect(interaction, client) {
-    const parts     = interaction.customId.split(':');
-    const action    = parts[1]; // 'pick_rank'
-    const targetId  = parts[2];
+    const parts    = interaction.customId.split(':');
+    const action   = parts[1];
+    const targetId = parts[2];
 
     if (action !== 'pick_rank') return;
 
     await interaction.deferUpdate();
 
-    // Permission re-check
     if (!hasRankManagerRole(interaction.member)) {
-      const container = new ContainerBuilder()
-        .addTextDisplayComponents(t => t.setContent('### ⚠️ Action Blocked\n⛔ You do not have permission to use rank management commands.'));
-      return interaction.editReply({ components: [container], flags: (1 << 15) });
+      return errorReply(interaction, '⛔ You do not have permission to use rank management commands.');
     }
 
     const selectedRank = parseInt(interaction.values[0], 10);
 
-    let roles, targetRecord, targetMembership, executorRank;
+    let roles, targetRecord, executorRank;
     try {
       [roles, targetRecord, executorRank] = await Promise.all([
         fetchGroupRoles(),
@@ -245,62 +220,42 @@ module.exports = {
       ]);
     } catch (err) {
       console.error('[Rank] Fetch error:', err.message);
-      const container = new ContainerBuilder()
-        .addTextDisplayComponents(t => t.setContent('### ❌ Error\nFailed to fetch data from Roblox. Please try again.'));
-      return interaction.editReply({ components: [container], flags: (1 << 15) });
+      return errorReply(interaction, 'Failed to fetch data from Roblox. Please try again.');
     }
 
     if (!targetRecord?.roblox_id) {
-      const container = new ContainerBuilder()
-        .addTextDisplayComponents(t => t.setContent('### ⚠️ Action Blocked\nTarget user is not verified or has no linked Roblox account.'));
-      return interaction.editReply({ components: [container], flags: (1 << 15) });
+      return errorReply(interaction, 'Target user is not verified or has no linked Roblox account.');
     }
 
-    // Self-rank check
     if (targetRecord.discord_id === interaction.user.id) {
-      const container = new ContainerBuilder()
-        .addTextDisplayComponents(t => t.setContent('### ⚠️ Action Blocked\nYou cannot change your own rank.'));
-      return interaction.editReply({ components: [container], flags: (1 << 15) });
+      return errorReply(interaction, 'You cannot change your own rank.');
     }
 
     const newRole = roles.find(r => r.rank === selectedRank);
     if (!newRole) {
-      const container = new ContainerBuilder()
-        .addTextDisplayComponents(t => t.setContent('### ⚠️ Action Blocked\nSelected rank no longer exists. Please try again.'));
-      return interaction.editReply({ components: [container], flags: (1 << 15) });
+      return errorReply(interaction, 'Selected rank no longer exists. Please try again.');
     }
 
-    // Cannot set to a rank >= executor's rank
     if (selectedRank >= executorRank) {
-      const container = new ContainerBuilder()
-        .addTextDisplayComponents(t => t.setContent(`### ⚠️ Action Blocked\nYou cannot set someone to a rank equal to or higher than your own (**${executorRank}**).`));
-      return interaction.editReply({ components: [container], flags: (1 << 15) });
+      return errorReply(interaction, `You cannot set someone to a rank equal to or higher than your own (**${executorRank}**).`);
     }
 
+    let targetMembership;
     try {
       targetMembership = await fetchMembership(targetRecord.roblox_id);
     } catch (err) {
       console.error('[Rank] Membership fetch error:', err.message);
-      const container = new ContainerBuilder()
-        .addTextDisplayComponents(t => t.setContent('### ❌ Error\nFailed to fetch target\'s group membership.'));
-      return interaction.editReply({ components: [container], flags: (1 << 15) });
+      return errorReply(interaction, 'Failed to fetch the target\'s group membership.');
     }
 
     if (!targetMembership) {
-      const container = new ContainerBuilder()
-        .addTextDisplayComponents(t => t.setContent('### ⚠️ Action Blocked\nThe target user is not in the Roblox group.'));
-      return interaction.editReply({ components: [container], flags: (1 << 15) });
+      return errorReply(interaction, 'The target user is not in the Roblox group.');
     }
 
-    const currentRolePath = targetMembership.role;
-    const currentRoleId = currentRolePath.split('/').pop();
-    const oldRole = roles.find(r => String(r.id) === currentRoleId);
+    const { role: oldRole } = resolveCurrentRole(roles, targetMembership);
 
-    // Cannot change rank of someone with rank >= executor's rank
     if (oldRole && oldRole.rank >= executorRank) {
-      const container = new ContainerBuilder()
-        .addTextDisplayComponents(t => t.setContent(`### ⚠️ Action Blocked\nYou cannot change the rank of someone whose rank (**${oldRole.rank} — ${oldRole.name}**) is equal to or higher than yours (**${executorRank}**).`));
-      return interaction.editReply({ components: [container], flags: (1 << 15) });
+      return errorReply(interaction, `You cannot change the rank of someone whose rank (**${oldRole.rank} — ${oldRole.name}**) is equal to or higher than yours (**${executorRank}**).`);
     }
 
     const targetUser = await interaction.client.users.fetch(targetId).catch(() => null);
@@ -311,39 +266,29 @@ module.exports = {
         targetRecord,
         targetUser,
         newRole,
-        oldRole: oldRole ?? null,
+        oldRole,
         membership: targetMembership,
         actionLabel: 'Rank Changed',
         client,
       });
     } catch (err) {
       console.error('[Rank] applyRankChange error:', err.response?.data ?? err.message);
-      const container = new ContainerBuilder()
-        .addTextDisplayComponents(t => t.setContent('### ❌ Error\nFailed to update rank on Roblox. Make sure your Open Cloud key has group write access.'));
-      return interaction.editReply({ components: [container], flags: (1 << 15) });
+      return errorReply(interaction, 'Failed to update rank on Roblox. Make sure your Open Cloud key has group write access.');
     }
   },
 };
 
-// ──────────────────────────────────────────────────────────────────────────
-// SUBCOMMAND IMPLEMENTATIONS
-// ──────────────────────────────────────────────────────────────────────────
+// ─── Subcommand implementations ──────────────────────────────────────────────
 
 async function handlePromote(interaction, client) {
-  const targetUser = interaction.options.getUser('user');
-  await _handleShift({ interaction, client, targetUser, direction: 'promote' });
+  return _handleShift({ interaction, client, targetUser: interaction.options.getUser('user'), direction: 'promote' });
 }
 
 async function handleDemote(interaction, client) {
-  const targetUser = interaction.options.getUser('user');
-  await _handleShift({ interaction, client, targetUser, direction: 'demote' });
+  return _handleShift({ interaction, client, targetUser: interaction.options.getUser('user'), direction: 'demote' });
 }
 
-/**
- * Shared logic for promote and demote (both shift by 1 rank).
- */
 async function _handleShift({ interaction, client, targetUser, direction }) {
-  // Self-rank check
   if (targetUser.id === interaction.user.id) {
     return errorReply(interaction, 'You cannot change your own rank.');
   }
@@ -376,12 +321,8 @@ async function _handleShift({ interaction, client, targetUser, direction }) {
     return errorReply(interaction, `**@${targetRecord.roblox_name}** is not in the Roblox group.`);
   }
 
-  const currentRolePath = targetMembership.role;
-  const currentRoleId = currentRolePath.split('/').pop();
-  const currentRoleIndex = roles.findIndex(r => String(r.id) === currentRoleId);
-  const oldRole = currentRoleIndex !== -1 ? roles[currentRoleIndex] : null;
+  const { index: currentIndex, role: oldRole } = resolveCurrentRole(roles, targetMembership);
 
-  // Cannot affect someone at or above executor's rank
   if (oldRole && oldRole.rank >= executorRank) {
     return errorReply(
       interaction,
@@ -389,15 +330,12 @@ async function _handleShift({ interaction, client, targetUser, direction }) {
     );
   }
 
-  // Find adjacent rank
   let newRole;
   if (direction === 'promote') {
-    if (currentRoleIndex === -1 || currentRoleIndex >= roles.length - 1) {
+    if (currentIndex === -1 || currentIndex >= roles.length - 1) {
       return errorReply(interaction, `**@${targetRecord.roblox_name}** is already at the highest rank or their rank could not be determined.`);
     }
-    newRole = roles[currentRoleIndex + 1];
-
-    // Cannot promote to a rank >= executor's rank
+    newRole = roles[currentIndex + 1];
     if (newRole.rank >= executorRank) {
       return errorReply(
         interaction,
@@ -405,11 +343,10 @@ async function _handleShift({ interaction, client, targetUser, direction }) {
       );
     }
   } else {
-    // demote
-    if (currentRoleIndex <= 0) {
+    if (currentIndex <= 0) {
       return errorReply(interaction, `**@${targetRecord.roblox_name}** is already at the lowest rank or their rank could not be determined.`);
     }
-    newRole = roles[currentRoleIndex - 1];
+    newRole = roles[currentIndex - 1];
   }
 
   try {
@@ -432,7 +369,6 @@ async function _handleShift({ interaction, client, targetUser, direction }) {
 async function handleChange(interaction, client) {
   const targetUser = interaction.options.getUser('user');
 
-  // Self-rank check
   if (targetUser.id === interaction.user.id) {
     return errorReply(interaction, 'You cannot change your own rank.');
   }
@@ -454,10 +390,10 @@ async function handleChange(interaction, client) {
     return errorReply(interaction, 'No group roles found. Check your Open Cloud key and group ID.');
   }
 
-  // Discord select menus support max 25 options — truncate if needed
+  // Discord select menus support max 25 options
   const options = roles.slice(0, 25).map(r =>
     new StringSelectMenuOptionBuilder()
-      .setLabel(`${r.name}`)
+      .setLabel(r.name)
       .setDescription(`Rank ${r.rank}`)
       .setValue(String(r.rank)),
   );
@@ -466,8 +402,6 @@ async function handleChange(interaction, client) {
     .setCustomId(`rank:pick_rank:${targetUser.id}`)
     .setPlaceholder('Select a rank...')
     .addOptions(options);
-
-  const row = new ActionRowBuilder().addComponents(select);
 
   const container = new ContainerBuilder()
     .addTextDisplayComponents(t =>
@@ -480,7 +414,7 @@ async function handleChange(interaction, client) {
     );
 
   return interaction.editReply({
-    components: [container, row],
+    components: [container, new ActionRowBuilder().addComponents(select)],
     flags: (1 << 15),
   });
 }
