@@ -8,6 +8,8 @@ const {
   ActionRowBuilder,
 } = require('discord.js');
 
+const pendingReasons = new Map();
+
 const axios = require('axios');
 const { getMemberByDiscordId } = require('../../utils/memberStore');
 const { ROBLOX_GROUP_ID, RANK_MANAGER_ROLE_IDS } = require('../../utils/rolesConfig');
@@ -115,11 +117,8 @@ function resolveCurrentRole(roles, membership) {
 
 // ─── Shared rank-change logic ────────────────────────────────────────────────
 
-async function applyRankChange({ interaction, targetRecord, targetUser, newRole, oldRole, membership, actionLabel }) {
+async function applyRankChange({ interaction, targetRecord, targetUser, newRole, oldRole, membership, actionLabel, reason }) {
   await updateMembership(membership.path, newRole.path);
-
-  const oldRankLine = oldRole ? `**${oldRole.rank}** — ${oldRole.name}` : 'Unknown';
-  const newRankLine = `**${newRole.rank}** — ${newRole.name}`;
 
   const container = new ContainerBuilder()
     .addTextDisplayComponents(t =>
@@ -131,8 +130,9 @@ async function applyRankChange({ interaction, targetRecord, targetUser, newRole,
     .addTextDisplayComponents(t =>
       t.setContent([
         `> **Target:** <@${targetUser.id}> (@${targetRecord.roblox_name})`,
-        `> **Previous Rank:** ${oldRankLine}`,
-        `> **New Rank:** ${newRankLine}`,
+        `> **Previous Rank:** ${oldRole ? `**${oldRole.rank}** — ${oldRole.name}` : 'Unknown'}`,
+        `> **New Rank:** **${newRole.rank}** — ${newRole.name}`,
+        `> **Reason:** ${reason}`,          // ← add
         `> **By:** <@${interaction.user.id}>`,
       ].join('\n')),
     );
@@ -145,6 +145,7 @@ async function applyRankChange({ interaction, targetRecord, targetUser, newRole,
     oldRank: oldRole ? `${oldRole.rank} — ${oldRole.name}` : 'Unknown',
     newRank: `${newRole.rank} — ${newRole.name}`,
     action: actionLabel,
+    reason,   // ← add
   });
 
   return interaction.editReply({
@@ -169,14 +170,18 @@ module.exports = {
     .setDescription('Manage Roblox group ranks for verified members')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
 
-    .addSubcommand(sub =>
-      sub
-        .setName('promote')
-        .setDescription('Promote a verified member up by one rank')
-        .addUserOption(opt =>
-          opt.setName('user')
-            .setDescription('The Discord user to promote')
-            .setRequired(true)))
+   .addSubcommand(sub =>
+  sub
+    .setName('promote')
+    .setDescription('Promote a verified member up by one rank')
+    .addUserOption(opt =>
+      opt.setName('user')
+        .setDescription('The Discord user to promote')
+        .setRequired(true))
+    .addStringOption(opt =>         // ← add this
+      opt.setName('reason')
+        .setDescription('Reason for this promotion')
+        .setRequired(true)))
 
     .addSubcommand(sub =>
       sub
@@ -185,7 +190,13 @@ module.exports = {
         .addUserOption(opt =>
           opt.setName('user')
             .setDescription('The Discord user to demote')
-            .setRequired(true)))
+            .setRequired(true))
+            .addStringOption(opt =>         // ← add this
+      opt.setName('reason')
+        .setDescription('Reason for this demotion')
+        .setRequired(true)))
+
+            
 
     .addSubcommand(sub =>
       sub
@@ -194,7 +205,12 @@ module.exports = {
         .addUserOption(opt =>
           opt.setName('user')
             .setDescription('The Discord user to rank')
-            .setRequired(true))),
+            .setRequired(true))
+        .addStringOption(opt =>         // ← add this
+             opt.setName('reason')
+             .setDescription('Reason for this rank change')
+            .setRequired(true)))
+,
 
   async execute(interaction, client) {
     await interaction.deferReply({ flags: (1 << 6) });
@@ -213,6 +229,8 @@ module.exports = {
     const parts    = interaction.customId.split(':');
     const action   = parts[1];
     const targetId = parts[2];
+const reason = pendingReasons.get(targetId) ?? 'No reason provided';
+pendingReasons.delete(targetId);
 
     if (action !== 'pick_rank') return;
 
@@ -294,11 +312,21 @@ module.exports = {
 // ─── Subcommand implementations ──────────────────────────────────────────────
 
 async function handlePromote(interaction, client) {
-  return _handleShift({ interaction, client, targetUser: interaction.options.getUser('user'), direction: 'promote' });
+  return _handleShift({
+    interaction, client,
+    targetUser: interaction.options.getUser('user'),
+    reason: interaction.options.getString('reason'),   // ← add
+    direction: 'promote',
+  });
 }
 
 async function handleDemote(interaction, client) {
-  return _handleShift({ interaction, client, targetUser: interaction.options.getUser('user'), direction: 'demote' });
+  return _handleShift({
+    interaction, client,
+    targetUser: interaction.options.getUser('user'),
+    reason: interaction.options.getString('reason'),   // ← add
+    direction: 'demote',
+  });
 }
 
 async function _handleShift({ interaction, client, targetUser, direction }) {
@@ -380,9 +408,17 @@ console.log('[Rank Debug] roles list:', roles.map(r => ({ id: r.id, rank: r.rank
     console.error('[Rank] applyRankChange error:', err.response?.data ?? err.message);
     return errorReply(interaction, 'Failed to update rank on Roblox. Make sure your Open Cloud key has group write access.');
   }
+   await applyRankChange({
+    interaction, targetRecord, targetUser,
+    newRole, oldRole, membership,
+    actionLabel: direction === 'promote' ? 'Promoted' : 'Demoted',
+    reason,   // ← add
+    client,
+  });
 }
 
 async function handleChange(interaction, client) {
+    pendingReasons.set(targetUser.id, interaction.options.getString('reason'));
   const targetUser = interaction.options.getUser('user');
 
   if (targetUser.id === interaction.user.id) {
