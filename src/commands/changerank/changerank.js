@@ -196,6 +196,8 @@ module.exports = {
     }
 
     try {
+        console.log('[ChangeRank Debug] membership.path:', targetMembership.path);
+console.log('[ChangeRank Debug] newRole.path:', newRole.path);
       await updateMembership(targetMembership.path, newRole.path);
     } catch (err) {
       console.error('[ChangeRank] Update error:', err.response?.data ?? err.message);

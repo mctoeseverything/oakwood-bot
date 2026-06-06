@@ -8,7 +8,7 @@ const {
   ButtonStyle,
 } = require('discord.js');
 const axios = require('axios');
-const { getMemberByDiscordId, getMemberById } = require('../../utils/memberStore');
+const { getMemberByDiscordId, getMemberById, getMemberByRobloxId } = require('../../utils/memberStore');
 const { getFlagCount } = require('../../utils/flagStore');
 const { ROBLOX_GROUP_ID } = require('../../utils/rolesConfig');
 
@@ -26,13 +26,16 @@ module.exports = {
     .addSubcommand(sub =>
       sub
         .setName('whois')
-        .setDescription('Look up a verified member by Discord user or Member ID')
+        .setDescription('Look up a verified member by Discord user, Member ID, or Roblox username')
         .addUserOption(opt =>
           opt.setName('user')
             .setDescription('Discord user to look up'))
         .addStringOption(opt =>
           opt.setName('memberid')
-            .setDescription('Member ID to look up (e.g. M-00001)'))),
+            .setDescription('Member ID to look up (e.g. M-00001)'))
+        .addStringOption(opt =>
+          opt.setName('roblox_username')
+            .setDescription('Roblox username to look up'))),
 
   async execute(interaction, client) {
     const sub = interaction.options.getSubcommand();
@@ -47,7 +50,6 @@ module.exports = {
     if (action === 'begin') {
       const baseUrl = process.env.VERIFY_URL || `http://localhost:${process.env.PORT || 3000}`;
 
-      // Pass the interaction token so server.js can edit this message after OAuth2
       const url = `${baseUrl}/verify?token=${interaction.token}&appId=${client.user.id}`;
 
       const row = new ActionRowBuilder().addComponents(
@@ -123,16 +125,41 @@ async function handlePanel(interaction) {
 async function handleWhois(interaction) {
   await interaction.deferReply({ flags: (1 << 6) });
 
-  const user     = interaction.options.getUser('user');
-  const memberId = interaction.options.getString('memberid');
+  const user          = interaction.options.getUser('user');
+  const memberId      = interaction.options.getString('memberid');
+  const robloxUsername = interaction.options.getString('roblox_username');
 
-  if (!user && !memberId) {
-    return interaction.editReply({ content: '⚠️ Please provide either a user or a Member ID.' });
+  if (!user && !memberId && !robloxUsername) {
+    return interaction.editReply({ content: '⚠️ Please provide a Discord user, Member ID, or Roblox username.' });
   }
 
   let record;
-  if (user)     record = await getMemberByDiscordId(user.id);
-  if (memberId) record = await getMemberById(memberId.toUpperCase());
+
+  if (user) {
+    record = await getMemberByDiscordId(user.id);
+  } else if (memberId) {
+    record = await getMemberById(memberId.toUpperCase());
+  } else if (robloxUsername) {
+    // Resolve Roblox username → ID → DB record
+    try {
+      const res = await axios.post(
+        'https://users.roblox.com/v1/usernames/users',
+        { usernames: [robloxUsername.trim()], excludeBannedUsers: false },
+      );
+      const robloxUser = res.data.data?.[0];
+      if (!robloxUser) {
+        return interaction.editReply({ content: `⚠️ No Roblox user found with the username **${robloxUsername}**.` });
+      }
+      record = await getMemberByRobloxId(String(robloxUser.id));
+      // If not in DB, build a minimal record so we can still show Roblox info
+      if (!record) {
+        return interaction.editReply({ content: `⚠️ No verified member found linked to Roblox user **@${robloxUser.name}**.` });
+      }
+    } catch (err) {
+      console.error('[Whois] Roblox username lookup error:', err.message);
+      return interaction.editReply({ content: '⚠️ Failed to look up that Roblox username. Please try again.' });
+    }
+  }
 
   if (!record) {
     return interaction.editReply({ content: '⚠️ No verified member found.' });
@@ -144,14 +171,13 @@ async function handleWhois(interaction) {
     discordMember = await interaction.guild.members.fetch(record.discord_id);
   } catch {}
 
-  const discordUser = discordMember?.user ?? await interaction.client.users.fetch(record.discord_id).catch(() => null);
+  const discordUser    = discordMember?.user ?? await interaction.client.users.fetch(record.discord_id).catch(() => null);
   const joinedDiscord  = discordUser?.createdAt   ? `<t:${Math.floor(discordUser.createdAt.getTime() / 1000)}:D>` : 'Unknown';
   const joinedServer   = discordMember?.joinedAt   ? `<t:${Math.floor(discordMember.joinedAt.getTime() / 1000)}:D>` : 'Not in server';
 
   // Fetch Roblox info
-  let robloxCreated   = 'Unknown';
-  let groupJoined     = 'Unknown';
-  let groupRole       = 'Not in group';
+  let robloxCreated    = 'Unknown';
+  let groupRole        = 'Not in group';
   let robloxProfileUrl = record.roblox_id ? `https://www.roblox.com/users/${record.roblox_id}/profile` : null;
 
   if (record.roblox_id) {
@@ -167,17 +193,15 @@ async function handleWhois(interaction) {
 
       const groupEntry = groupRes.data.data?.find(g => String(g.group.id) === String(ROBLOX_GROUP_ID));
       if (groupEntry) {
-        groupRole   = groupEntry.role.name;
-        // Roblox doesn't expose group join date via public API so we omit it
-        groupJoined = 'N/A';
+        groupRole = groupEntry.role.name;
       }
     } catch (err) {
       console.error('[Whois] Roblox fetch error:', err.message);
     }
   }
 
-  const verifiedDate = `<t:${Math.floor(new Date(record.joined_at).getTime() / 1000)}:D>`;
-  const flagCount = await getFlagCount(record.member_id);
+  const verifiedDate   = `<t:${Math.floor(new Date(record.joined_at).getTime() / 1000)}:D>`;
+  const flagCount      = await getFlagCount(record.member_id);
   const verifiedStatus = !record.verified ? 'Unverified' : record.roblox_id ? 'Verified' : 'Partially Verified (Discord only)';
 
   const lines = [
@@ -211,8 +235,6 @@ async function handleWhois(interaction) {
       s.setDivider(true).setSpacing(SeparatorSpacingSize.Large),
     );
 
-  const components = [container];
-
   if (robloxProfileUrl) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -225,7 +247,7 @@ async function handleWhois(interaction) {
   }
 
   return interaction.editReply({
-    components,
+    components: [container],
     flags: (1 << 15),
   });
 }
