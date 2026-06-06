@@ -152,21 +152,18 @@ function logBlacklistBlocked({ type, accountId }) {
   });
 }
 
-/**
- * Logs a Roblox group rank change (promote / demote / changerank).
- */
 function logRankChange({ discordId, robloxName, memberId, by, oldRank, newRank, action, reason }) {
   return sendLog({
     emoji: action === 'Promoted' ? '⬆️' : action === 'Demoted' ? '⬇️' : '🔢',
     title: `Rank ${action}`,
     lines: [
-      `**Member ID:** \`${memberId}\``,
-      `**Discord:** <@${discordId}>`,
+      `**Member ID:** ${memberId ?? 'Not assigned'}`,
+      `**Discord:** ${discordId ? `<@${discordId}>` : 'Not assigned'}`,
       `**Roblox:** @${robloxName}`,
       `**By:** <@${by}>`,
       `**Previous Rank:** ${oldRank}`,
       `**New Rank:** ${newRank}`,
-      `**Reason:** ${reason}`,   // ← add
+      `**Reason:** ${reason}`,
     ],
   });
 }

@@ -6,7 +6,7 @@ const {
 } = require('discord.js');
 
 const axios = require('axios');
-const { getMemberByDiscordId } = require('../../utils/memberStore');
+const { getMemberByRobloxId } = require('../../utils/memberStore');
 const { ROBLOX_GROUP_ID, RANK_MANAGER_ROLE_IDS } = require('../../utils/rolesConfig');
 const { logRankChange } = require('../../utils/logger');
 
@@ -19,16 +19,13 @@ function ocHeaders() {
 async function fetchGroupRoles() {
   let allRoles = [];
   let nextPageToken = null;
-
   do {
     const params = { maxPageSize: 20 };
     if (nextPageToken) params.pageToken = nextPageToken;
-
     const res = await axios.get(
       `${OC_BASE}/groups/${ROBLOX_GROUP_ID}/roles`,
       { headers: ocHeaders(), params },
     );
-
     allRoles = allRoles.concat(res.data.groupRoles ?? []);
     nextPageToken = res.data.nextPageToken ?? null;
   } while (nextPageToken);
@@ -63,12 +60,23 @@ async function updateMembership(membershipPath, rolePath) {
   );
 }
 
+async function resolveRobloxUser(username) {
+  const res = await axios.post(
+    'https://users.roblox.com/v1/usernames/users',
+    { usernames: [username], excludeBannedUsers: false },
+  );
+  const user = res.data.data?.[0];
+  if (!user) return null;
+  return { id: String(user.id), name: user.name };
+}
+
 function hasRankManagerRole(member) {
   if (!Array.isArray(RANK_MANAGER_ROLE_IDS) || RANK_MANAGER_ROLE_IDS.length === 0) return false;
   return member.roles.cache.some(r => RANK_MANAGER_ROLE_IDS.includes(r.id));
 }
 
 async function getExecutorRank(interaction, roles) {
+  const { getMemberByDiscordId } = require('../../utils/memberStore');
   const record = await getMemberByDiscordId(interaction.user.id);
   if (!record?.roblox_id) return 0;
   const membership = await fetchMembership(record.roblox_id);
@@ -92,11 +100,11 @@ async function errorReply(interaction, message) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('changerank')
-    .setDescription('Set a verified member to a specific rank')
+    .setDescription('Set a Roblox user to a specific rank')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .addUserOption(opt =>
-      opt.setName('user')
-        .setDescription('The Discord user to rank')
+    .addStringOption(opt =>
+      opt.setName('roblox_username')
+        .setDescription('The Roblox username to rank')
         .setRequired(true))
     .addStringOption(opt =>
       opt.setName('rank')
@@ -108,22 +116,18 @@ module.exports = {
         .setDescription('Reason for this rank change')
         .setRequired(true)),
 
-  // ── Autocomplete: return live rank list filtered by what the user has typed ──
   async handleAutocomplete(interaction) {
     const focused = interaction.options.getFocused().toLowerCase();
-
     let roles;
     try {
       roles = await fetchGroupRoles();
     } catch {
       return interaction.respond([]);
     }
-
     const choices = roles
       .filter(r => r.name.toLowerCase().includes(focused) || String(r.rank).includes(focused))
-      .slice(0, 25) // Discord max
+      .slice(0, 25)
       .map(r => ({ name: `${r.name} (Rank ${r.rank})`, value: String(r.rank) }));
-
     return interaction.respond(choices);
   },
 
@@ -134,32 +138,46 @@ module.exports = {
       return errorReply(interaction, '⛔ You do not have permission to use rank management commands.');
     }
 
-    const targetUser    = interaction.options.getUser('user');
-    const selectedRank  = parseInt(interaction.options.getString('rank'), 10);
-    const reason        = interaction.options.getString('reason');
+    const username     = interaction.options.getString('roblox_username').trim();
+    const selectedRank = parseInt(interaction.options.getString('rank'), 10);
+    const reason       = interaction.options.getString('reason');
 
     if (isNaN(selectedRank)) {
       return errorReply(interaction, 'Invalid rank selected. Please choose from the autocomplete list.');
     }
 
-    if (targetUser.id === interaction.user.id) {
-      return errorReply(interaction, 'You cannot change your own rank.');
+    let robloxUser;
+    try {
+      robloxUser = await resolveRobloxUser(username);
+    } catch (err) {
+      console.error('[ChangeRank] Roblox username lookup error:', err.message);
+      return errorReply(interaction, 'Failed to look up that Roblox username. Please try again.');
     }
 
-    let roles, targetRecord, executorRank;
+    if (!robloxUser) {
+      return errorReply(interaction, `No Roblox user found with the username **${username}**.`);
+    }
+
+    let roles, executorRank, targetMembership;
     try {
       roles = await fetchGroupRoles();
-      [targetRecord, executorRank] = await Promise.all([
-        getMemberByDiscordId(targetUser.id),
+      [executorRank, targetMembership] = await Promise.all([
         getExecutorRank(interaction, roles),
+        fetchMembership(robloxUser.id),
       ]);
     } catch (err) {
       console.error('[ChangeRank] Fetch error:', err.message);
       return errorReply(interaction, 'Failed to fetch data from Roblox. Please try again.');
     }
 
-    if (!targetRecord?.roblox_id) {
-      return errorReply(interaction, `<@${targetUser.id}> is not verified or has no linked Roblox account.`);
+    if (!targetMembership) {
+      return errorReply(interaction, `**@${robloxUser.name}** is not in the Roblox group.`);
+    }
+
+    const { getMemberByDiscordId } = require('../../utils/memberStore');
+    const executorRecord = await getMemberByDiscordId(interaction.user.id);
+    if (executorRecord?.roblox_id === robloxUser.id) {
+      return errorReply(interaction, 'You cannot change your own rank.');
     }
 
     const newRole = roles.find(r => r.rank === selectedRank);
@@ -169,18 +187,6 @@ module.exports = {
 
     if (selectedRank >= executorRank) {
       return errorReply(interaction, `You cannot set someone to a rank equal to or higher than your own (**${executorRank}**).`);
-    }
-
-    let targetMembership;
-    try {
-      targetMembership = await fetchMembership(targetRecord.roblox_id);
-    } catch (err) {
-      console.error('[ChangeRank] Membership fetch error:', err.message);
-      return errorReply(interaction, 'Failed to fetch the target\'s group membership.');
-    }
-
-    if (!targetMembership) {
-      return errorReply(interaction, `**@${targetRecord.roblox_name}** is not in the Roblox group.`);
     }
 
     const { role: oldRole } = resolveCurrentRole(roles, targetMembership);
@@ -196,12 +202,28 @@ module.exports = {
       return errorReply(interaction, 'Failed to update rank on Roblox. Make sure your Open Cloud key has group write access.');
     }
 
+    const dbRecord = await getMemberByRobloxId(robloxUser.id);
+    let discordLine = '> **Discord:** Not assigned';
+    let memberId = 'Not assigned';
+
+    if (dbRecord) {
+      memberId = dbRecord.member_id;
+      try {
+        await interaction.guild.members.fetch(dbRecord.discord_id);
+        discordLine = `> **Discord:** <@${dbRecord.discord_id}>`;
+      } catch {
+        discordLine = `> **Discord:** ${dbRecord.discord_name} *(not in server)*`;
+      }
+    }
+
     const container = new ContainerBuilder()
       .addTextDisplayComponents(t => t.setContent('### 🔢 Rank Changed'))
       .addSeparatorComponents(s => s.setDivider(true).setSpacing(SeparatorSpacingSize.Large))
       .addTextDisplayComponents(t =>
         t.setContent([
-          `> **Target:** <@${targetUser.id}> (@${targetRecord.roblox_name})`,
+          `> **Roblox:** @${robloxUser.name}`,
+          discordLine,
+          `> **Member ID:** ${memberId}`,
           `> **Previous Rank:** ${oldRole ? `**${oldRole.rank}** — ${oldRole.name}` : 'Unknown'}`,
           `> **New Rank:** **${newRole.rank}** — ${newRole.name}`,
           `> **Reason:** ${reason}`,
@@ -210,9 +232,9 @@ module.exports = {
       );
 
     await logRankChange({
-      discordId: targetUser.id,
-      robloxName: targetRecord.roblox_name,
-      memberId: targetRecord.member_id,
+      robloxName: robloxUser.name,
+      memberId,
+      discordId: dbRecord?.discord_id ?? null,
       by: interaction.user.id,
       oldRank: oldRole ? `${oldRole.rank} — ${oldRole.name}` : 'Unknown',
       newRank: `${newRole.rank} — ${newRole.name}`,
