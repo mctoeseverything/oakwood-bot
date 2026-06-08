@@ -41,14 +41,14 @@ const ROBLOX_GROUP_ID = '12183130';
  *   robloxRank: 'discordRoleId',
  */
 const RANK_TO_ROLE = {
-  254: '1511479068971892758', // Chairman
+  24: '1511479068971892758', // Chairman
   23: '1511479347725209631', // Vice Chairman
   22: '1512547883340009475', // Development Contributor
   21: '1512547929414570196', // Company President
   20: '1512548523881660558', // Company Vice President
   19: '1512548659290701825', // Chief Executive Officer
   18: '1512548774097191075', // Corporate Operations Executive
-  17: '1512548924748075099', // Board of Executives
+  17: '1512548924748075099', // Board of Directors
   16: '1512549034827452426', // Corporate Executive
   15: '1512549127852920873', // Senior Corporate
   14: '1512549222816284692', // Corporate Associate
@@ -73,4 +73,4 @@ const RANK_TO_ROLE = {
  */
 const MANAGED_ROLE_IDS = Object.values(RANK_TO_ROLE);
 
-module.exports = { ROBLOX_GROUP_ID, RANK_TO_ROLE, MANAGED_ROLE_IDS, ADMIN_ROLE_IDS, RANK_MANAGER_ROLE_IDS };
+module.exports = { ROBLOX_GROUP_ID, RANK_TO_ROLE, MANAGED_ROLE_IDS, ADMIN_ROLE_IDS, RANK_MANAGER_ROLE_IDS, ANNOUNCER_ROLE_IDS };
