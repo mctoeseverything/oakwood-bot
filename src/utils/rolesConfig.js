@@ -14,6 +14,10 @@ const ADMIN_ROLE_IDS = [
   // '000000000000000000', // ← Add more roles if needed
 ];
 
+const ANNOUNCER_ROLE_IDS = [
+  '1508516366314115132', //This is the co host role for temporary use  // ← your role ID here
+];
+
 /**
  * Discord role IDs that can use /rank promote, /rank demote, /rank change.
  * Any user with at least one of these roles can manage Roblox group ranks.
