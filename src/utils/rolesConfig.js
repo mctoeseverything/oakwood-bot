@@ -10,7 +10,7 @@
  * Any user with at least one of these roles can use admin commands.
  */
 const ADMIN_ROLE_IDS = [
-  '1511809393224843314',
+  '1512630272015994930',
   // '000000000000000000', // ← Add more roles if needed
 ];
 
@@ -24,7 +24,7 @@ const ANNOUNCER_ROLE_IDS = [
  * Rank changes are still limited to ranks strictly below the executor's own rank.
  */
 const RANK_MANAGER_ROLE_IDS = [
-   '1434220849526734968', // ← Replace with your rank manager role ID(s)
+   '1512630229166981170', // ← Replace with your rank manager role ID(s)
 ];
 
 /**
