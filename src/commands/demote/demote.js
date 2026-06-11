@@ -4,7 +4,7 @@ const {
   ContainerBuilder,
   SeparatorSpacingSize,
 } = require('discord.js');
-
+const { getRankban } = require('../../utils/rankbanStore');
 const axios = require('axios');
 const { getMemberByRobloxId } = require('../../utils/memberStore');
 const { ROBLOX_GROUP_ID, RANK_MANAGER_ROLE_IDS } = require('../../utils/rolesConfig');
@@ -132,7 +132,16 @@ module.exports = {
     if (!robloxUser) {
       return errorReply(interaction, `No Roblox user found with the username **${username}**.`);
     }
-
+const rankban = await getRankban(robloxUser.id);
+if (rankban) {
+  const container = new ContainerBuilder()
+    .addTextDisplayComponents(t =>
+      t.setContent(
+        '### 🔒 Rank Change Failed\nThe person you are trying to change has a rankban active. Ask a member of Corporate for assistance.',
+      ),
+    );
+  return interaction.editReply({ components: [container], flags: (1 << 15) });
+}
     let roles, executorRank, targetMembership;
     try {
       roles = await fetchGroupRoles();
